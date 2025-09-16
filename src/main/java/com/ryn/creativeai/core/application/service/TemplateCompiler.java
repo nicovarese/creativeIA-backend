@@ -2,42 +2,73 @@ package com.ryn.creativeai.core.application.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
-import java.util.Map;
 
-/**
- * Compila un JSON-plantilla sustituyendo placeholders {{key}} por literales JSON.
- * - Soporta placeholders entre comillas ("{{key}}") y sin comillas.
- * - Serializa valores con Jackson para que el JSON resultante sea válido.
- * - Lanza RuntimeException si el resultado final no es JSON válido.
- */
+import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
 @Service
 public class TemplateCompiler {
+
     private static final ObjectMapper M = new ObjectMapper();
 
-    public String compile(String template, Map<String,Object> params) {
+    // Coincide con {{ key }}  o  ${ key }  (sin comillas alrededor)
+    private static final Pattern PLACEHOLDER =
+            Pattern.compile("\\{\\{\\s*([a-zA-Z0-9_]+)\\s*\\}\\}|\\$\\{\\s*([a-zA-Z0-9_]+)\\s*\\}");
+
+    public String compile(String template, Map<String, Object> params) {
+        if (template == null) throw new IllegalArgumentException("template is null");
+        if (params == null) throw new IllegalArgumentException("params is null");
+
         String out = template;
+
+        // ---------- Paso 1: reemplazo de formas ENTRE COMILLAS ----------
+        // Si el template tiene: "text": "${prompt}"
+        // Reemplazamos el bloque completo incluyendo las comillas
         for (var e : params.entrySet()) {
-            String placeholder = "{{" + e.getKey() + "}}";
-            String jsonValue;
-            try {
-                jsonValue = M.writeValueAsString(e.getValue()); // serializa correctamente
-            } catch (Exception ex) {
-                jsonValue = "\"" + e.getValue().toString() + "\"";
-            }
+            String key = e.getKey();
+            String jsonValue = toJson(e.getValue());
 
-            // 1) Si estaba con comillas en el template → reemplazo quitando comillas
-            out = out.replace("\"" + placeholder + "\"", jsonValue);
-
-            // 2) Si estaba sin comillas → reemplazo directo
-            out = out.replace(placeholder, jsonValue);
+            // "${key}"
+            out = out.replace("\"${" + key + "}\"", jsonValue);
+            // "{{key}}"
+            out = out.replace("\"{{" + key + "}}\"", jsonValue);
         }
 
-        // Validación final
+        // ---------- Paso 2: reemplazo genérico de formas SIN COMILLAS ----------
+        Matcher m = PLACEHOLDER.matcher(out);
+        StringBuffer sb = new StringBuffer();
+
+        while (m.find()) {
+            String key = m.group(1) != null ? m.group(1) : m.group(2);
+
+            if (!params.containsKey(key)) {
+                throw new IllegalArgumentException("Falta valor para placeholder: " + key);
+            }
+
+            String jsonValue = toJson(params.get(key));
+            m.appendReplacement(sb, Matcher.quoteReplacement(jsonValue));
+        }
+        m.appendTail(sb);
+        out = sb.toString();
+
+        // ---------- Validación final ----------
         try {
-            M.readTree(out); // lanza excepción si no es JSON válido
+            M.readTree(out); // si no es JSON válido, lanza
             return out;
         } catch (Exception e) {
-            throw new RuntimeException("Resultado del template no es JSON válido", e);
+            // Ayuda para depurar si pasa de nuevo
+            throw new IllegalStateException("El resultado del template no es JSON válido", e);
+        }
+    }
+
+    private static String toJson(Object value) {
+        try {
+            // Serializa con el tipo correcto: números/boolean/objetos sin comillas;
+            // strings con comillas y escapado correcto.
+            return M.writeValueAsString(value);
+        } catch (Exception e) {
+            return "\"" + String.valueOf(value) + "\"";
         }
     }
 }

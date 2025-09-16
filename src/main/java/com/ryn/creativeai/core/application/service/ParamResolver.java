@@ -12,10 +12,10 @@ import java.util.Objects;
 
 /**
  * Resuelve parámetros de un template a partir de su schema:
- *  - Merge defaults <- input
- *  - Valida required, additionalProperties=false, type (string/integer),
- *    enum, minimum/maximum (para integer).
- *  - Coercea enteros desde string si es posible.
+ * - Merge defaults <- input
+ * - Valida required, additionalProperties=false, type (string/integer),
+ * enum, minimum/maximum (para integer).
+ * - Coercea enteros desde string si es posible.
  * Lanza IllegalArgumentException con mensajes claros ante errores.
  */
 @Service
@@ -23,19 +23,20 @@ public class ParamResolver {
 
     private static final ObjectMapper M = new ObjectMapper();
 
-    public Map<String,Object> resolve(String schemaJson, Map<String,Object> inputParams) {
+    public Map<String, Object> resolve(String schemaJson, Map<String, Object> inputParams) {
         try {
             JsonNode schema = (schemaJson == null || schemaJson.isBlank())
                     ? M.readTree("{}")
                     : M.readTree(schemaJson);
 
-            Map<String,Object> out = new HashMap<>();
+            Map<String, Object> out = new HashMap<>();
 
             // 1) defaults
             if (schema.has("defaults")) {
-                Map<String,Object> defaults = M.convertValue(
+                Map<String, Object> defaults = M.convertValue(
                         schema.get("defaults"),
-                        new TypeReference<Map<String,Object>>() {});
+                        new TypeReference<Map<String, Object>>() {
+                        });
                 if (defaults != null) out.putAll(defaults);
             }
 
@@ -56,7 +57,7 @@ public class ParamResolver {
         }
     }
 
-    private void validate(JsonNode schema, Map<String,Object> params) {
+    private void validate(JsonNode schema, Map<String, Object> params) {
         JsonNode props = schema.get("properties");
 
         // required
@@ -84,7 +85,7 @@ public class ParamResolver {
 
         // Validaciones por propiedad (enum, minimum/maximum, type básico)
         if (props != null && props.isObject()) {
-            for (Iterator<String> it = props.fieldNames(); it.hasNext();) {
+            for (Iterator<String> it = props.fieldNames(); it.hasNext(); ) {
                 String name = it.next();
                 if (!params.containsKey(name)) continue;
 
@@ -115,9 +116,13 @@ public class ParamResolver {
                     boolean ok = false;
                     for (JsonNode n : def.get("enum")) {
                         if (n.isNumber() && val instanceof Number) {
-                            if (n.asLong() == ((Number) val).longValue()) { ok = true; break; }
+                            if (n.asLong() == ((Number) val).longValue()) {
+                                ok = true;
+                                break;
+                            }
                         } else if (Objects.equals(n.asText(), String.valueOf(val))) {
-                            ok = true; break;
+                            ok = true;
+                            break;
                         }
                     }
                     if (!ok) {
@@ -142,11 +147,11 @@ public class ParamResolver {
         }
     }
 
-    private void normalizeTypes(JsonNode schema, Map<String,Object> params) {
+    private void normalizeTypes(JsonNode schema, Map<String, Object> params) {
         JsonNode props = schema.get("properties");
         if (props == null || !props.isObject()) return;
 
-        for (Iterator<String> it = props.fieldNames(); it.hasNext();) {
+        for (Iterator<String> it = props.fieldNames(); it.hasNext(); ) {
             String name = it.next();
             if (!params.containsKey(name)) continue;
 
@@ -174,7 +179,11 @@ public class ParamResolver {
     private Long tryToLong(Object v) {
         if (v == null) return null;
         if (v instanceof Number n) return n.longValue();
-        try { return Long.parseLong(String.valueOf(v)); } catch (Exception e) { return null; }
+        try {
+            return Long.parseLong(String.valueOf(v));
+        } catch (Exception e) {
+            return null;
+        }
     }
 }
 
