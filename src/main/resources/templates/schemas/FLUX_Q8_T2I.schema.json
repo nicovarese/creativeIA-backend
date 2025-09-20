@@ -1,0 +1,29 @@
+{
+  "title": "FLUX_Q8_T2I",
+  "type": "object",
+  "properties": {
+    "prompt": {
+      "type": "string",
+      "minLength": 3,
+      "default": "A Victorian closeup a Scottish woman with a very shocked face and open wide mouth."
+    },
+    "width": {
+      "type": "integer",
+      "minimum": 64,
+      "multipleOf": 64,
+      "default": 1024
+    },
+    "height": {
+      "type": "integer",
+      "minimum": 64,
+      "multipleOf": 64,
+      "default": 1024
+    }
+  },
+  "required": [
+    "prompt",
+    "width",
+    "height"
+  ],
+  "additionalProperties": false
+}
