@@ -1,6 +1,5 @@
 package com.ryn.creativeai.core.application.usecase;
 
-import com.ryn.creativeai.core.domain.model.Asset;
 import com.ryn.creativeai.infra.AssetRepository;
 import com.ryn.creativeai.infra.JobRepository;
 import lombok.RequiredArgsConstructor;
@@ -20,6 +19,8 @@ public class GetJobStatusUseCase {
             return new Response(
                     j.getId(),
                     j.getStatus().name(),
+                    j.getFlow(),
+                    j.getErrorMessage(),
                     a.stream().map(aa -> new Image(
                             aa.getUrl(), aa.getWidth(), aa.getHeight()
                     )).toList()
@@ -27,10 +28,8 @@ public class GetJobStatusUseCase {
         });
     }
 
-    public record Response(UUID jobId, String status, List<Image> assets) {
-    }
+    //           ↓↓↓  agregado flow y errorMessage
+    public record Response(UUID jobId, String status, String flow, String errorMessage, List<Image> assets) {}
 
-    public record Image(String url, Integer w, Integer h) {
-    }
+    public record Image(String url, Integer w, Integer h) {}
 }
-

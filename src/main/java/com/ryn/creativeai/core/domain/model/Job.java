@@ -8,15 +8,19 @@ import org.hibernate.annotations.UuidGenerator;
 import java.time.Instant;
 import java.util.UUID;
 
-@Entity
-@Table(name = "jobs")
+@Entity @Table(name = "jobs")
 @Getter @Setter
 public class Job {
 
-    @Id
-    @UuidGenerator
+    @Id @UuidGenerator
     private UUID id;
 
+    /* --- Relaciones --- */
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "project_id", nullable = false)
+    private Project project;
+
+    /* --- Template/Provider --- */
     @Column(name = "template_key", nullable = false)
     private String templateKey;
 
@@ -26,35 +30,50 @@ public class Job {
     @Column(nullable = false)
     private String provider;   // "mock" | "comfyui"
 
+    /* --- Estado --- */
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private JobStatus status;
 
+    /* --- Payload compilado --- */
     @Lob
     @Column(name = "compiled_json", nullable = false)
     private String compiledJson;
 
-    @Lob
-    @Column(name = "error_message")
+    /* --- Error --- */
+    @Lob @Column(name = "error_message")
     private String errorMessage;
 
+    /* --- Timestamps --- */
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
-    /* ---------- Métodos de dominio (los que te faltan) ---------- */
+    /* --- Metadatos opcionales por flow --- */
+    @Column(name = "flow_raw") private String flow; // txt2img | img2img | upscale | mockup
+    @Column(length = 4000) private String prompt;
+    @Column private Integer width;
+    @Column private Integer height;
+    @Column private Integer batch;
 
+    @Column private String style;
+    @Column private String brand;
+    @Column private String product;
+
+    @Column private Double strength; // img2img
+    @Column private Integer factor;  // upscale
+    @Column private String template; // mockup
+    @Column(name = "scale_pct") private Integer scale;
+    @Column(name = "offset_x")  private Integer offsetX;
+    @Column(name = "offset_y")  private Integer offsetY;
+
+    /* --- Dominio --- */
     public void markQueued()  { this.status = JobStatus.QUEUED; touch(); }
     public void markRunning() { this.status = JobStatus.RUNNING; touch(); }
-    public void markDone()    { this.status = JobStatus.DONE;    this.errorMessage = null; touch(); }
-
-    public void markFailed(String message) {
-        this.status = JobStatus.FAILED;
-        this.errorMessage = message;
-        touch();
-    }
+    public void markDone()    { this.status = JobStatus.DONE; this.errorMessage = null; touch(); }
+    public void markFailed(String message) { this.status = JobStatus.FAILED; this.errorMessage = message; touch(); }
 
     private void touch() { this.updatedAt = Instant.now(); }
 

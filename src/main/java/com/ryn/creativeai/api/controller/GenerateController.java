@@ -1,36 +1,32 @@
 package com.ryn.creativeai.api.controller;
 
-import com.ryn.creativeai.core.application.usecase.CreateGenerationJobUseCase;
-import jakarta.validation.Valid;
-import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
-import lombok.RequiredArgsConstructor;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
 
-import java.util.Map;
-import java.util.UUID;
+import com.ryn.creativeai.core.application.service.FlowDispatcher;
+import com.ryn.creativeai.core.domain.dto.CreateJobRequestDto;
+import com.ryn.creativeai.core.domain.dto.JobResponseDto;
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.MediaType;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 @RestController
-@RequestMapping("/api") @RequiredArgsConstructor
+@RequestMapping("/v1/jobs")
+@RequiredArgsConstructor
 public class GenerateController {
-    private final CreateGenerationJobUseCase useCase;
 
-    @PostMapping("/generate")
-    public ResponseEntity<?> generate(@Valid @RequestBody GenerateDTO dto){
-        UUID id = useCase.handle(new CreateGenerationJobUseCase.Command(
-                dto.template(), dto.version(), dto.provider(), dto.params()
-        ));
-        return ResponseEntity.accepted().body(Map.of("jobId", id, "status", "QUEUED"));
+    private final FlowDispatcher dispatcher;
+
+    /** JSON puro (txt2img ó los otros si vienen con imageUrl) */
+    @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE)
+    public JobResponseDto createJson(@Valid @RequestBody CreateJobRequestDto req) {
+        return dispatcher.dispatch(req, null);
     }
 
-    public record GenerateDTO(
-            @NotBlank String template,
-            @NotBlank String version,
-            @NotBlank String provider,
-            @NotNull Map<String, Object> params
-    ) {}
+    /** multipart: payload (json) + image (file) para img2img/upscale/mockup */
+    @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public JobResponseDto createMultipart(@RequestPart("payload") @Valid CreateJobRequestDto req,
+                                       @RequestPart(value = "image", required = false) MultipartFile image) {
+        return dispatcher.dispatch(req, image);
+    }
 }
