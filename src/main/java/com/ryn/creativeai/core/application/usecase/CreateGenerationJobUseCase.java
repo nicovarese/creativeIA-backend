@@ -11,6 +11,7 @@ import com.ryn.creativeai.core.domain.model.Flow;
 import com.ryn.creativeai.core.domain.dto.JobResponseDto;
 import com.ryn.creativeai.core.domain.model.Asset;
 import com.ryn.creativeai.core.domain.model.Job;
+import com.ryn.creativeai.core.domain.model.JobProgressStage;
 import com.ryn.creativeai.core.domain.model.JobStatus;
 import com.ryn.creativeai.core.ports.ImageProviderPort;
 import com.ryn.creativeai.core.ports.StoragePort;
@@ -210,20 +211,23 @@ public class CreateGenerationJobUseCase {
 
     private void process(UUID jobId) {
         var job = jobs.findById(jobId).orElseThrow();
+        if (job.progressStage() == JobProgressStage.QUEUED) {
+            eventsHub.send(jobId, "PROGRESS", statusPayload(job));
+        }
         try {
             job.markRunning();
             jobs.save(job);
             eventsHub.send(jobId, "STARTED", statusPayload(job));
 
             // 1) enviar al provider
-            job.setProgressSafe(20);
+            job.moveToStage(JobProgressStage.SENDING_TO_PROVIDER);
             jobs.save(job);
             eventsHub.send(jobId, "PROGRESS", statusPayload(job));
 
             var localPaths = providers.get(job.getProvider()).generate(job.getCompiledJson());
 
             // 2) guardando en storage
-            job.setProgressSafe(70);
+            job.moveToStage(JobProgressStage.STORING_RESULTS);
             jobs.save(job);
             eventsHub.send(jobId, "PROGRESS", statusPayload(job));
 
@@ -245,23 +249,20 @@ public class CreateGenerationJobUseCase {
         } catch (Exception e) {
             job.markFailed(e.getMessage());
             jobs.save(job);
-            eventsHub.send(jobId, "FAILED", Map.of(
-                    "id", jobId,
-                    "status", job.getStatus().name(),
-                    "progress", job.getProgress(),
-                    "error", job.getErrorMessage()
-            ));
+            eventsHub.send(jobId, "FAILED", failurePayload(job));
         } finally {
             eventsHub.complete(jobId);
         }
     }
 
     private Map<String,Object> statusPayload(Job j) {
-        return Map.of(
-                "id", j.getId(),
-                "status", j.getStatus().name(),
-                "progress", j.getProgress()
-        );
+        Map<String,Object> payload = new LinkedHashMap<>();
+        payload.put("id", j.getId());
+        payload.put("status", j.getStatus().name());
+        payload.put("progress", j.getProgress());
+        payload.put("currentStage", j.progressStage().name());
+        payload.put("progressStages", JobProgressStage.definitions());
+        return payload;
     }
 
     private Map<String,Object> resultPayload(UUID jobId) {
@@ -269,12 +270,15 @@ public class CreateGenerationJobUseCase {
                 .map(a -> Map.of("url", a.getUrl(), "width", a.getWidth(), "height", a.getHeight()))
                 .toList();
         var j = jobs.findById(jobId).orElseThrow();
-        return Map.of(
-                "id", jobId,
-                "status", j.getStatus().name(),
-                "progress", j.getProgress(),
-                "assets", imgs
-        );
+        var payload = statusPayload(j);
+        payload.put("assets", imgs);
+        return payload;
+    }
+
+    private Map<String,Object> failurePayload(Job j) {
+        var payload = statusPayload(j);
+        payload.put("error", j.getErrorMessage());
+        return payload;
     }
     // util
     private static void putIfNotNull(Map<String, Object> map, String k, Object v) {

@@ -8,6 +8,10 @@ import org.hibernate.annotations.UuidGenerator;
 import java.time.Instant;
 import java.util.UUID;
 
+import static com.ryn.creativeai.core.domain.model.JobProgressStage.COMPLETED;
+import static com.ryn.creativeai.core.domain.model.JobProgressStage.QUEUED;
+import static com.ryn.creativeai.core.domain.model.JobProgressStage.STARTING;
+
 @Entity @Table(name = "jobs")
 @Getter @Setter
 public class Job {
@@ -73,14 +77,27 @@ public class Job {
     @Column(nullable = false)
     private Integer progress = 0;
 
-    public void markQueued()  { this.status = JobStatus.QUEUED; this.progress = 0;  touch(); }
-    public void markRunning() { this.status = JobStatus.RUNNING; this.progress = 5;  touch(); }
-    public void markDone()    { this.status = JobStatus.DONE;    this.progress = 100;this.errorMessage=null; touch(); }
+    public void markQueued()  { this.status = JobStatus.QUEUED; applyStage(QUEUED); }
+    public void markRunning() { this.status = JobStatus.RUNNING; applyStage(STARTING); }
+    public void markDone()    { this.status = JobStatus.DONE;    this.errorMessage = null; applyStage(COMPLETED); }
     public void markFailed(String message) { this.status = JobStatus.FAILED; this.errorMessage = message; touch(); }
 
     public void setProgressSafe(int p){ this.progress = Math.max(0, Math.min(100, p)); touch(); }
 
+    public void moveToStage(JobProgressStage stage) {
+        applyStage(stage);
+    }
+
+    public JobProgressStage progressStage() {
+        return JobProgressStage.fromProgress(progress).orElse(QUEUED);
+    }
+
     private void touch() { this.updatedAt = Instant.now(); }
+
+    private void applyStage(JobProgressStage stage) {
+        this.progress = stage.progressValue();
+        touch();
+    }
 
     @PrePersist
     public void prePersist() {
