@@ -16,8 +16,8 @@ public class Job {
     private UUID id;
 
     /* --- Relaciones --- */
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "project_id", nullable = false)
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "project_id")   // <-- coincide con la columna nueva
     private Project project;
 
     /* --- Template/Provider --- */
@@ -70,10 +70,15 @@ public class Job {
     @Column(name = "offset_y")  private Integer offsetY;
 
     /* --- Dominio --- */
-    public void markQueued()  { this.status = JobStatus.QUEUED; touch(); }
-    public void markRunning() { this.status = JobStatus.RUNNING; touch(); }
-    public void markDone()    { this.status = JobStatus.DONE; this.errorMessage = null; touch(); }
+    @Column(nullable = false)
+    private Integer progress = 0;
+
+    public void markQueued()  { this.status = JobStatus.QUEUED; this.progress = 0;  touch(); }
+    public void markRunning() { this.status = JobStatus.RUNNING; this.progress = 5;  touch(); }
+    public void markDone()    { this.status = JobStatus.DONE;    this.progress = 100;this.errorMessage=null; touch(); }
     public void markFailed(String message) { this.status = JobStatus.FAILED; this.errorMessage = message; touch(); }
+
+    public void setProgressSafe(int p){ this.progress = Math.max(0, Math.min(100, p)); touch(); }
 
     private void touch() { this.updatedAt = Instant.now(); }
 

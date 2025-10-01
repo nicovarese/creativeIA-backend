@@ -26,7 +26,6 @@ public class ProjectsController {
     public Project create(@Valid @RequestBody CreateProjectReq req) {
         Project p = new Project();
         p.setName(req.getName());
-        p.setOwnerUserId(req.getOwnerUserId()); // opcional
         return projects.save(p);
     }
 

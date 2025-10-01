@@ -28,7 +28,7 @@ public class FileTemplateRegistry implements TemplateRegistryPort {
 
     /**
      * Lee un recurso del classpath y devuelve su contenido como String.
-     * Ejemplo de path: "workflows/flux_gguf_v1.json" (NO incluir 'templates/')
+     * Ejemplo de path: "workflows/txt2img.json" (NO incluir 'templates/')
      */
     public String readClasspath(String path) {
         String normalized = normalize(path);
@@ -86,11 +86,11 @@ public class FileTemplateRegistry implements TemplateRegistryPort {
         base = base.replace('\\', '/');
         if (!base.endsWith("/")) base = base + "/";
 
-        return base + p; // p.ej.: templates/workflows/flux_gguf_v1.json
+        return base + p; // p.ej.: templates/workflows/txt2img.json
     }
 
     private Resource load(String normalizedPath) {
-        // classpath:templates/workflows/flux_gguf_v1.json
+        // classpath:templates/workflows/txt2img.json
         return resourceLoader.getResource("classpath:" + normalizedPath);
     }
 

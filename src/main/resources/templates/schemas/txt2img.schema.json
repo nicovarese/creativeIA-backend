@@ -1,5 +1,5 @@
 {
-  "title": "FLUX_Q8_T2I",
+  "title": "txt2img",
   "type": "object",
   "properties": {
     "prompt": {
@@ -13,6 +13,10 @@
       "multipleOf": 64,
       "default": 1024
     },
+    "batch": {
+      "type": "integer",
+      "default": 1
+    },
     "height": {
       "type": "integer",
       "minimum": 64,
@@ -23,7 +27,8 @@
   "required": [
     "prompt",
     "width",
-    "height"
+    "height",
+    "batch"
   ],
   "additionalProperties": false
 }

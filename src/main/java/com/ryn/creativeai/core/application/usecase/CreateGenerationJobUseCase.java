@@ -1,6 +1,9 @@
 package com.ryn.creativeai.core.application.usecase;
 
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.ryn.creativeai.core.application.service.JobEventsHub;
+import com.ryn.creativeai.core.application.service.LoraCatalog;
 import com.ryn.creativeai.core.application.service.ParamResolver;
 import com.ryn.creativeai.core.application.service.TemplateCompiler;
 import com.ryn.creativeai.core.domain.dto.CreateJobRequestDto;
@@ -48,23 +51,59 @@ public class CreateGenerationJobUseCase {
     private final JobRepository jobs;
     private final AssetRepository assets;
     private final TaskExecutor taskExecutor;
+    private final LoraCatalog loraCatalog;
+    private final JobEventsHub eventsHub;
 
-    /** Entrada del UC desde los handlers */
+    // decide el templateKey según flow + cantidad de loras
+    private String selectTemplateKey(Flow flow, int loraCount) {
+        String base = switch (flow) {
+            case txt2img -> "txt2img";
+            case img2img -> "img2img";
+            case upscale -> "upscale";
+            case mockup  -> "mockup";
+        };
+        return switch (loraCount) {
+            case 0 -> base;
+            case 1 -> base + "_lora1";
+            default -> base + "_lora2";
+        };
+    }
+
     public JobResponseDto handle(CreateJobRequestDto req, @Nullable MultipartFile image) {
-        // 1) Armar mapa de parámetros crudos desde el request
-        Map<String, Object> rawParams = buildRawParams(req, image);
+        // 1) Resolver LoRAs presentes
+        var brandSpec = loraCatalog.brandProduct(emptyToNull(req.getBrand()), emptyToNull(req.getProduct()));
+        var styleSpec = loraCatalog.style(emptyToNull(req.getStyle()));
+        int loraCount = (brandSpec.isPresent()?1:0) + (styleSpec.isPresent()?1:0);
 
-        // 2) Cargar workflow y schema (por flow)
-        String templateKey = templateKeyForFlow(req.getFlow());
-        TemplateDef def = loadFromClasspath(templateKey, DEFAULT_VERSION);
+        // 2) Elegir templateKey según flow y cantidad
+        String templateKey = selectTemplateKey(req.getFlow(), loraCount);
 
-        // 3) Resolver/validar parámetros con el schema (defaults + checks)
-        Map<String, Object> finalParams = paramResolver.resolve(def.schemaJson(), rawParams);
+        // 3) Cargar workflow + schema
+        TemplateDef def = loadFromClasspath(templateKey);
 
-        // 4) Compilar el workflow con placeholders → JSON final para el provider
+        // 4) Armar parámetros crudos (los anteriores + los lora_*)
+        Map<String,Object> raw = buildRawParams(req, image);
+
+        // Parámetros para templates lora1/lora2
+        brandSpec.ifPresent(s -> {
+            raw.put("lora_brand_name", s.name());
+            raw.put("lora_brand_strength_model", s.strengthModel());
+            raw.put("lora_brand_strength_clip",  s.strengthClip());
+        });
+        styleSpec.ifPresent(s -> {
+            raw.put("lora_style_name", s.name());
+            raw.put("lora_style_strength_model", s.strengthModel());
+            raw.put("lora_style_strength_clip",  s.strengthClip());
+        });
+
+        // 🔴 clave: solo mandamos al resolver lo que existe en el schema
+        Map<String,Object> templateParams = onlySchemaProps(def.schemaJson(), raw);
+
+        // 5) Validar contra schema + compilar
+        Map<String,Object> finalParams = paramResolver.resolve(def.schemaJson(), templateParams);
         String compiled = templateCompiler.compile(def.json(), finalParams);
 
-        // 5) Persistir Job (QUEUED) con Project
+        // 6) Persistir Job (QUEUED) con Project
         var projectId = UUID.fromString(req.getProjectId()); // asumiendo UUID en el front
         var project = projects.findById(projectId)
                 .orElseThrow(() -> new IllegalArgumentException("project not found: " + req.getProjectId()));
@@ -73,7 +112,7 @@ public class CreateGenerationJobUseCase {
         job.setProject(project);                      // ← RELACIÓN
         job.setTemplateKey(templateKey);
         job.setTemplateVer("v1");                     // o lo que uses
-        job.setProvider("comfy");                     // o el que corresponda
+        job.setProvider("mock");                     // o el que corresponda
         job.setCompiledJson(compiled);
 
         job.setFlow(req.getFlow().name());
@@ -160,51 +199,83 @@ public class CreateGenerationJobUseCase {
     /** holder interno; no dependemos de métodos extras en el puerto */
     private record TemplateDef(String json, String schemaJson) {}
 
-    private TemplateDef loadFromClasspath(String key, String ver) {
-        // templates/workflows/{key}_{ver}.json
-        // templates/schemas/{key}_{ver}.schema.json
-        String base = key + "_" + ver;
-        String workflowJson = registry.readClasspath("workflows/" + base + ".json");
-        String schemaJson   = registry.readClasspath("schemas/" + base + ".schema.json");
+    private TemplateDef loadFromClasspath(String key) {
+        // templates/workflows/{key}.json
+        // templates/schemas/{key}.schema.json
+        String workflowJson = registry.readClasspath("workflows/" + key + ".json");
+        String schemaJson   = registry.readClasspath("schemas/" + key + ".schema.json");
+
         return new TemplateDef(workflowJson, schemaJson);
     }
 
     private void process(UUID jobId) {
-        Job job = jobs.findById(jobId).orElseThrow();
-        job.markRunning();
-        jobs.save(job);
-
-        ImageProviderPort provider = providers.get(job.getProvider());
-        if (provider == null) {
-            job.markFailed("Provider desconocido: " + job.getProvider());
-            jobs.save(job);
-            return;
-        }
-
+        var job = jobs.findById(jobId).orElseThrow();
         try {
-            // 1) Ejecutar provider → devuelve paths locales o URLs (según tu adapter)
-            var outputs = provider.generate(job.getCompiledJson()); // mantiene tu firma actual
+            job.markRunning();
+            jobs.save(job);
+            eventsHub.send(jobId, "STARTED", statusPayload(job));
 
-            // 2) Subir resultados a storage (si provider devolvió paths locales)
-            var stored = storage.store(outputs); // mantiene tu firma actual (lista → urls + dims)
+            // 1) enviar al provider
+            job.setProgressSafe(20);
+            jobs.save(job);
+            eventsHub.send(jobId, "PROGRESS", statusPayload(job));
 
-            // 3) Persistir assets
+            var localPaths = providers.get(job.getProvider()).generate(job.getCompiledJson());
+
+            // 2) guardando en storage
+            job.setProgressSafe(70);
+            jobs.save(job);
+            eventsHub.send(jobId, "PROGRESS", statusPayload(job));
+
+            var stored = storage.store(localPaths);
             for (var si : stored) {
-                Asset a = new Asset();
+                var a = new Asset();
                 a.setJob(job);
+                a.setProject(job.getProject());
+                a.setFlow(job.getFlow()); // o job.getFlow().name()
                 a.setUrl(si.url());
-                a.setWidth(si.w());
-                a.setHeight(si.h());
+                a.setWidth(si.w() != null ? si.w() : 0);
+                a.setHeight(si.h() != null ? si.h() : 0);
                 assets.save(a);
             }
+
             job.markDone();
+            jobs.save(job);
+            eventsHub.send(jobId, "DONE", resultPayload(jobId));
         } catch (Exception e) {
             job.markFailed(e.getMessage());
-        } finally {
             jobs.save(job);
+            eventsHub.send(jobId, "FAILED", Map.of(
+                    "id", jobId,
+                    "status", job.getStatus().name(),
+                    "progress", job.getProgress(),
+                    "error", job.getErrorMessage()
+            ));
+        } finally {
+            eventsHub.complete(jobId);
         }
     }
 
+    private Map<String,Object> statusPayload(Job j) {
+        return Map.of(
+                "id", j.getId(),
+                "status", j.getStatus().name(),
+                "progress", j.getProgress()
+        );
+    }
+
+    private Map<String,Object> resultPayload(UUID jobId) {
+        var imgs = assets.findByJobId(jobId).stream()
+                .map(a -> Map.of("url", a.getUrl(), "width", a.getWidth(), "height", a.getHeight()))
+                .toList();
+        var j = jobs.findById(jobId).orElseThrow();
+        return Map.of(
+                "id", jobId,
+                "status", j.getStatus().name(),
+                "progress", j.getProgress(),
+                "assets", imgs
+        );
+    }
     // util
     private static void putIfNotNull(Map<String, Object> map, String k, Object v) {
         if (v != null) map.put(k, v);
@@ -212,4 +283,21 @@ public class CreateGenerationJobUseCase {
     private static String emptyToNull(String s) {
         return (s == null || s.isBlank() || "Ninguno".equalsIgnoreCase(s)) ? null : s;
     }
+
+    // en CreateGenerationJobUseCase (o en un util)
+    private Map<String, Object> onlySchemaProps(String schemaJson, Map<String, Object> raw) {
+        try {
+            var schema = new ObjectMapper().readTree(schemaJson);
+            var props = schema.path("properties");
+            if (!props.isObject()) return Map.of();
+            Map<String, Object> out = new HashMap<>();
+            for (var e : raw.entrySet()) {
+                if (props.has(e.getKey())) out.put(e.getKey(), e.getValue());
+            }
+            return out;
+        } catch (Exception e) {
+            throw new RuntimeException("No pude leer el schema para filtrar props", e);
+        }
+    }
+
 }

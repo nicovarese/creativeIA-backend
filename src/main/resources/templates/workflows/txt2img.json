@@ -2,7 +2,7 @@
   "1": {
     "inputs": {
       "clip_name1": "clip_l.safetensors",
-      "clip_name2": "t5-v1_1-xxl-encoder-Q3_K_L.gguf",
+      "clip_name2": "t5\\t5-v1_1-xxl-encoder-Q8_0.gguf",
       "type": "flux"
     },
     "class_type": "DualCLIPLoaderGGUF",
@@ -12,7 +12,7 @@
   },
   "2": {
     "inputs": {
-      "unet_name": "flux1-dev-Q2_K.gguf"
+      "unet_name": "FLUX1\\flux1-dev-Q8_0.gguf"
     },
     "class_type": "UnetLoaderGGUF",
     "_meta": {
@@ -21,7 +21,7 @@
   },
   "4": {
     "inputs": {
-      "vae_name": "flux-vae.safetensors"
+      "vae_name": "ae.safetensors"
     },
     "class_type": "VAELoader",
     "_meta": {
@@ -90,7 +90,7 @@
     "inputs": {
       "width": "${width}",
       "height": "${height}",
-      "batch_size": 1
+      "batch_size": "${batch}"
     },
     "class_type": "EmptySD3LatentImage",
     "_meta": {
@@ -99,7 +99,7 @@
   },
   "13": {
     "inputs": {
-      "noise_seed": 378273155455587
+      "noise_seed": 125908940220589
     },
     "class_type": "RandomNoise",
     "_meta": {
@@ -160,7 +160,7 @@
   },
   "18": {
     "inputs": {
-      "filename_prefix": "api_flux",
+      "filename_prefix": "ComfyUI",
       "images": [
         "8",
         0
