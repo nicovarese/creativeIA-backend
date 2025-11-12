@@ -1,4 +1,7 @@
 package com.ryn.creativeai.core.domain.dto;
 
-public class JobAssetDto {
-}
+public record JobAssetDto(
+        String url,
+        Integer width,
+        Integer height
+) {}

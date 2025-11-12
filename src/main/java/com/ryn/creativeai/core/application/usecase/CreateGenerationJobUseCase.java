@@ -39,8 +39,10 @@ import java.util.*;
 @RequiredArgsConstructor
 public class CreateGenerationJobUseCase {
 
-    private static final String DEFAULT_PROVIDER = "comfy"; // <-- ajustá al key de tu ComfyUIAdapter
-    private static final String DEFAULT_VERSION  = "v1";    // <-- ajustá si versionás plantillas
+    private static final ObjectMapper SCHEMA_MAPPER = new ObjectMapper();
+
+    private static final String DEFAULT_PROVIDER = "mock"; // key del MockImageProviderAdapter
+    private static final String DEFAULT_VERSION  = "v1";   // versión por defecto de plantillas   // <-- ajustá si versionás plantillas
 
     private final ProjectRepository projects;
     private final TemplateRegistryPort registry;
@@ -111,8 +113,8 @@ public class CreateGenerationJobUseCase {
         Job job = new Job();
         job.setProject(project);                      // ← RELACIÓN
         job.setTemplateKey(templateKey);
-        job.setTemplateVer("v1");                     // o lo que uses
-        job.setProvider("mock");                     // o el que corresponda
+        job.setTemplateVer(DEFAULT_VERSION);
+        job.setProvider(resolveProvider());                   // o el que corresponda
         job.setCompiledJson(compiled);
 
         job.setFlow(req.getFlow().name());
@@ -134,17 +136,13 @@ public class CreateGenerationJobUseCase {
         jobs.save(job);
 
         taskExecutor.execute(() -> process(job.getId()));
-        return new JobResponseDto(job.getId().toString(), JobStatus.QUEUED.name(), req.getFlow(), List.of(), null);
-    }
-
-    /** Convención de nombres para tus templates por flow. Ajustá si usás otra. */
-    private String templateKeyForFlow(Flow flow) {
-        return switch (flow) {
-            case txt2img -> "txt2img";
-            case img2img -> "img2img";
-            case upscale -> "upscale";
-            case mockup  -> "mockup";
-        };
+        return new JobResponseDto(
+                job.getId(),
+                JobStatus.QUEUED,          // ✅ pasa directamente el enum, no el name()
+                req.getFlow().name(),      // ✅ convierte Flow (enum) → String
+                List.of(),
+                null
+        );
     }
 
     /** Arma el mapa de parámetros que el TemplateCompiler espera (antes del schema). */
@@ -220,7 +218,9 @@ public class CreateGenerationJobUseCase {
             jobs.save(job);
             eventsHub.send(jobId, "PROGRESS", statusPayload(job));
 
-            var localPaths = providers.get(job.getProvider()).generate(job.getCompiledJson());
+            var provider = requireProvider(job.getProvider());
+            var localPaths = provider.generate(job.getCompiledJson());
+
 
             // 2) guardando en storage
             job.setProgressSafe(70);
@@ -287,7 +287,7 @@ public class CreateGenerationJobUseCase {
     // en CreateGenerationJobUseCase (o en un util)
     private Map<String, Object> onlySchemaProps(String schemaJson, Map<String, Object> raw) {
         try {
-            var schema = new ObjectMapper().readTree(schemaJson);
+            var schema = SCHEMA_MAPPER.readTree(schemaJson);
             var props = schema.path("properties");
             if (!props.isObject()) return Map.of();
             Map<String, Object> out = new HashMap<>();
@@ -298,6 +298,20 @@ public class CreateGenerationJobUseCase {
         } catch (Exception e) {
             throw new RuntimeException("No pude leer el schema para filtrar props", e);
         }
+    }
+
+    private String resolveProvider() {
+        if (providers.containsKey(DEFAULT_PROVIDER)) {
+            return DEFAULT_PROVIDER;
+        }
+        return providers.keySet().stream()
+                .findFirst()
+                .orElseThrow(() -> new IllegalStateException("No hay proveedores de imágenes registrados"));
+    }
+
+    private ImageProviderPort requireProvider(String providerKey) {
+        return Optional.ofNullable(providers.get(providerKey))
+                .orElseThrow(() -> new IllegalStateException("Proveedor no registrado: " + providerKey));
     }
 
 }
