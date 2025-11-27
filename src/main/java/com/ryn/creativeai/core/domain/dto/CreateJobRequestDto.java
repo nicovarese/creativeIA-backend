@@ -25,6 +25,5 @@ public class CreateJobRequestDto {
     private Integer factor;
 
     // mockup
-    private String template;
     private Integer scale, offsetX, offsetY;
 }

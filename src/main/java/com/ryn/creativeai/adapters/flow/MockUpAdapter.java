@@ -19,9 +19,6 @@ public class MockUpAdapter implements FlowPort {
         boolean hasImage = (image != null && !image.isEmpty())
                 || (req.getImageUrl() != null && !req.getImageUrl().isBlank());
         if (!hasImage) throw new IllegalArgumentException("image required");
-        if (req.getTemplate() == null || req.getTemplate().isBlank())
-            throw new IllegalArgumentException("template required");
-
         return useCase.handle(req, image);
     }
 }

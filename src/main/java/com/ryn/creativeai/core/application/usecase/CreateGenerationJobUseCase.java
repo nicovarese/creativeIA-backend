@@ -41,7 +41,7 @@ public class CreateGenerationJobUseCase {
 
     private static final ObjectMapper SCHEMA_MAPPER = new ObjectMapper();
 
-    private static final String DEFAULT_PROVIDER = "mock"; // key del MockImageProviderAdapter
+    private static final String DEFAULT_PROVIDER = "comfy"; // key del MockImageProviderAdapter
     private static final String DEFAULT_VERSION  = "v1";   // versión por defecto de plantillas   // <-- ajustá si versionás plantillas
 
     private final ProjectRepository projects;
@@ -127,7 +127,6 @@ public class CreateGenerationJobUseCase {
         job.setProduct(emptyToNull(req.getProduct()));
         job.setStrength(req.getStrength());
         job.setFactor(req.getFactor());
-        job.setTemplate(req.getTemplate());
         job.setScale(req.getScale());
         job.setOffsetX(req.getOffsetX());
         job.setOffsetY(req.getOffsetY());
@@ -169,7 +168,6 @@ public class CreateGenerationJobUseCase {
         putIfNotNull(p, "factor",     r.getFactor());
 
         // mockup
-        putIfNotNull(p, "template",   r.getTemplate());
         putIfNotNull(p, "scale",      r.getScale());
         putIfNotNull(p, "offset_x",   r.getOffsetX());
         putIfNotNull(p, "offset_y",   r.getOffsetY());
@@ -187,12 +185,14 @@ public class CreateGenerationJobUseCase {
         } catch (Exception e) {
             throw new IllegalStateException("No se pudo preparar la imagen de entrada", e);
         }
-        putIfNotNull(p, "input_image", inputPath);
+        // 👇 CLAVE: la key ahora es "image"
+        putIfNotNull(p, "image", inputPath);
 
         return p;
     }
 
-    // --- implementación original adaptada ---
+
+        // --- implementación original adaptada ---
 
     /** holder interno; no dependemos de métodos extras en el puerto */
     private record TemplateDef(String json, String schemaJson) {}
