@@ -22,7 +22,7 @@ public class CreateJobRequestDto {
     private String imageUrl;
 
     // upscale
-    private Integer factor;
+    private Integer resolution;
 
     // mockup
     private Integer scale, offsetX, offsetY;

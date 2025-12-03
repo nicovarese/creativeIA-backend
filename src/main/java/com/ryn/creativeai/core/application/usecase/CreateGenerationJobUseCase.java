@@ -126,7 +126,7 @@ public class CreateGenerationJobUseCase {
         job.setBrand(emptyToNull(req.getBrand()));
         job.setProduct(emptyToNull(req.getProduct()));
         job.setStrength(req.getStrength());
-        job.setFactor(req.getFactor());
+        job.setResolution(req.getResolution());
         job.setScale(req.getScale());
         job.setOffsetX(req.getOffsetX());
         job.setOffsetY(req.getOffsetY());
@@ -165,7 +165,7 @@ public class CreateGenerationJobUseCase {
         putIfNotNull(p, "strength",   r.getStrength());
 
         // upscale
-        putIfNotNull(p, "factor",     r.getFactor());
+        putIfNotNull(p, "resolution",     r.getResolution());
 
         // mockup
         putIfNotNull(p, "scale",      r.getScale());
