@@ -9,6 +9,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 
 @RestController
 @RequestMapping("/v1/jobs")
@@ -16,6 +18,7 @@ import org.springframework.web.multipart.MultipartFile;
 public class GenerateController {
 
     private final FlowDispatcher dispatcher;
+    private final ObjectMapper objectMapper;
 
     /** JSON puro (txt2img ó los otros si vienen con imageUrl) */
     @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE)
@@ -25,8 +28,12 @@ public class GenerateController {
 
     /** multipart: payload (json) + image (file) para img2img/upscale/mockup */
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public JobResponseDto createMultipart(@RequestPart("payload") @Valid CreateJobRequestDto req,
-                                       @RequestPart(value = "image", required = false) MultipartFile image) {
+    public JobResponseDto createMultipart(
+            @RequestPart("payload") String payloadJson,
+            @RequestPart(value = "image", required = false) MultipartFile image
+    ) throws Exception {
+        // parseás vos el JSON de la parte "payload"
+        CreateJobRequestDto req = objectMapper.readValue(payloadJson, CreateJobRequestDto.class);
         return dispatcher.dispatch(req, image);
     }
 }
