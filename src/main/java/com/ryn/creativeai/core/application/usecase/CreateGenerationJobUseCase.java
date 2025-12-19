@@ -23,9 +23,13 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.core.task.TaskExecutor;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.reactive.function.client.WebClient;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardOpenOption;
+import java.time.Duration;
 import java.util.*;
 
 /**
@@ -57,34 +61,38 @@ public class CreateGenerationJobUseCase {
     private final JobEventsHub eventsHub;
 
     // decide el templateKey según flow + cantidad de loras
-    private String selectTemplateKey(Flow flow, int loraCount) {
+    private String selectTemplateKey(Flow flow, int loraCount, int imageCount) {
         String base = switch (flow) {
             case txt2img -> "txt2img";
             case img2img -> "img2img";
             case upscale -> "upscale";
             case mockup  -> "mockup";
         };
-        return switch (loraCount) {
+
+        String byLora = switch (loraCount) {
             case 0 -> base;
             case 1 -> base + "_lora1";
             default -> base + "_lora2";
         };
+
+        return (imageCount > 0) ? (byLora + "_img" + imageCount) : byLora;
     }
 
-    public JobResponseDto handle(CreateJobRequestDto req, @Nullable MultipartFile image) {
+    public JobResponseDto handle(CreateJobRequestDto req, @Nullable List<MultipartFile> images) {
         // 1) Resolver LoRAs presentes
         var brandSpec = loraCatalog.brandProduct(emptyToNull(req.getBrand()), emptyToNull(req.getProduct()));
         var styleSpec = loraCatalog.style(emptyToNull(req.getStyle()));
         int loraCount = (brandSpec.isPresent()?1:0) + (styleSpec.isPresent()?1:0);
+        int countImages = countImages(images, req.getImageUrls());
 
         // 2) Elegir templateKey según flow y cantidad
-        String templateKey = selectTemplateKey(req.getFlow(), loraCount);
+        String templateKey = selectTemplateKey(req.getFlow(), loraCount, countImages);
 
         // 3) Cargar workflow + schema
         TemplateDef def = loadFromClasspath(templateKey);
 
         // 4) Armar parámetros crudos (los anteriores + los lora_*)
-        Map<String,Object> raw = buildRawParams(req, image);
+        Map<String,Object> raw = buildRawParams(req, images);
 
         // Parámetros para templates lora1/lora2
         brandSpec.ifPresent(s -> {
@@ -144,8 +152,7 @@ public class CreateGenerationJobUseCase {
         );
     }
 
-    /** Arma el mapa de parámetros que el TemplateCompiler espera (antes del schema). */
-    private Map<String, Object> buildRawParams(CreateJobRequestDto r, @Nullable MultipartFile image) {
+    private Map<String, Object> buildRawParams(CreateJobRequestDto r, @Nullable List<MultipartFile> images) {
         Map<String, Object> p = new HashMap<>();
 
         // comunes
@@ -156,7 +163,7 @@ public class CreateGenerationJobUseCase {
         putIfNotNull(p, "height",     r.getHeight());
         putIfNotNull(p, "batch",      r.getBatch());
 
-        // estilo / marca / producto (si vienen "Ninguno" el handler ya los convirtió a null)
+        // estilo / marca / producto
         putIfNotNull(p, "style",      emptyToNull(r.getStyle()));
         putIfNotNull(p, "brand",      emptyToNull(r.getBrand()));
         putIfNotNull(p, "product",    emptyToNull(r.getProduct()));
@@ -165,30 +172,55 @@ public class CreateGenerationJobUseCase {
         putIfNotNull(p, "strength",   r.getStrength());
 
         // upscale
-        putIfNotNull(p, "resolution",     r.getResolution());
+        putIfNotNull(p, "resolution", r.getResolution());
 
         // mockup
         putIfNotNull(p, "scale",      r.getScale());
         putIfNotNull(p, "offset_x",   r.getOffsetX());
         putIfNotNull(p, "offset_y",   r.getOffsetY());
 
-        // input: si hay archivo → guardo TEMP y paso la ruta; si no, paso imageUrl
-        String inputPath = null;
-        try {
-            if (image != null && !image.isEmpty()) {
-                Path tmp = Files.createTempFile("creativeai_input_", "_" + image.getOriginalFilename());
-                Files.write(tmp, image.getBytes());
-                inputPath = tmp.toAbsolutePath().toString();
-            } else if (r.getImageUrl() != null && !r.getImageUrl().isBlank()) {
-                inputPath = r.getImageUrl(); // remoto o interno
-            }
-        } catch (Exception e) {
-            throw new IllegalStateException("No se pudo preparar la imagen de entrada", e);
+        // stage de todas las imágenes
+        List<String> comfyFilenames = stageAllToComfyInput(
+                images,
+                r.getImageUrls(), // List<String>
+                Paths.get("C:/Users/natal/AppData/Roaming/StabilityMatrix/Packages/ComfyUI/input")
+        );
+
+        // mapeo a image_1, image_2, ...
+        for (int i = 0; i < comfyFilenames.size(); i++) {
+            p.put("image_" + (i + 1), comfyFilenames.get(i));
         }
-        // 👇 CLAVE: la key ahora es "image"
-        putIfNotNull(p, "image", inputPath);
+
+        // opcional: compat si algún template viejo usa {{image}}
+        if (!comfyFilenames.isEmpty()) {
+            p.put("image", comfyFilenames.get(0));
+        }
 
         return p;
+    }
+
+    private List<String> stageAllToComfyInput(@Nullable List<MultipartFile> images,
+                                              @Nullable List<String> imageUrls,
+                                              Path comfyInputDir) {
+        List<String> out = new ArrayList<>();
+
+        if (images != null) {
+            for (MultipartFile f : images) {
+                if (f != null && !f.isEmpty()) {
+                    out.add(stageToComfyInput(f, null, comfyInputDir));
+                }
+            }
+        }
+
+        if (imageUrls != null) {
+            for (String url : imageUrls) {
+                if (url != null && !url.isBlank()) {
+                    out.add(stageToComfyInput(null, url, comfyInputDir));
+                }
+            }
+        }
+
+        return out;
     }
 
 
@@ -313,5 +345,66 @@ public class CreateGenerationJobUseCase {
         return Optional.ofNullable(providers.get(providerKey))
                 .orElseThrow(() -> new IllegalStateException("Proveedor no registrado: " + providerKey));
     }
+
+
+    private String stageToComfyInput(@Nullable MultipartFile image, @Nullable String imageUrl, Path comfyInputDir) {
+        try {
+            Files.createDirectories(comfyInputDir);
+
+            byte[] bytes;
+            String filename;
+
+            if (image != null && !image.isEmpty()) {
+                bytes = image.getBytes();
+                filename = image.getOriginalFilename();          // ej: 183.JPG
+            } else if (imageUrl != null && !imageUrl.isBlank()) {
+                bytes = WebClient.create()
+                        .get().uri(imageUrl)
+                        .retrieve()
+                        .bodyToMono(byte[].class)
+                        .block(Duration.ofSeconds(30));
+
+                String u = imageUrl;
+                int q = u.indexOf('?');
+                if (q >= 0) u = u.substring(0, q);
+                int slash = u.lastIndexOf('/');
+                filename = (slash >= 0) ? u.substring(slash + 1) : u;
+            } else {
+                return null;
+            }
+
+            // Por si viniera con path (aunque decís que no): me quedo solo con el nombre
+            filename = Paths.get(filename).getFileName().toString();
+
+            Path dst = comfyInputDir.resolve(filename);
+
+            // SOBRESCRIBIR SIEMPRE
+            Files.write(dst, bytes, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+
+            return filename; // <- mismo filename que venía
+        } catch (Exception e) {
+            throw new IllegalStateException("No se pudo preparar la imagen de entrada", e);
+        }
+    }
+
+
+    private int countImages(@Nullable List<MultipartFile> images, @Nullable List<String> imageUrls) {
+        int files = 0;
+        if (images != null) {
+            for (MultipartFile f : images) {
+                if (f != null && !f.isEmpty()) files++;
+            }
+        }
+
+        int urls = 0;
+        if (imageUrls != null) {
+            for (String u : imageUrls) {
+                if (u != null && !u.isBlank()) urls++;
+            }
+        }
+
+        return files + urls;
+    }
+
 
 }

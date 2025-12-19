@@ -13,6 +13,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.EnumMap;
+import java.util.List;
 import java.util.Map;
 
 @Service
@@ -36,7 +37,7 @@ public class FlowDispatcher {
         this.handlers = Map.copyOf(map);
     }
 
-    public JobResponseDto dispatch(CreateJobRequestDto req, MultipartFile image) {
+    public JobResponseDto dispatch(CreateJobRequestDto req, List<MultipartFile> images) {
         req.setStyle(normalizeSelection(req.getStyle()));
         req.setBrand(normalizeSelection(req.getBrand()));
         req.setProduct(normalizeSelection(req.getProduct()));
@@ -45,7 +46,7 @@ public class FlowDispatcher {
         if (handler == null) {
             throw new IllegalArgumentException("unsupported flow: " + req.getFlow());
         }
-        return handler.handle(req, image);
+        return handler.handle(req, images);
     }
 
     private static String normalizeSelection(String value) {

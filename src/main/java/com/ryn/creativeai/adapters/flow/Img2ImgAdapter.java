@@ -8,6 +8,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.util.List;
+
 @Component
 @RequiredArgsConstructor
 public class Img2ImgAdapter implements FlowPort {
@@ -15,14 +17,16 @@ public class Img2ImgAdapter implements FlowPort {
     private final CreateGenerationJobUseCase useCase;
 
     @Override
-    public JobResponseDto handle(CreateJobRequestDto req, MultipartFile image) {
+    public JobResponseDto handle(CreateJobRequestDto req, List<MultipartFile> images) {
         if (req.getPrompt() == null || req.getPrompt().isBlank())
             throw new IllegalArgumentException("prompt required");
-        boolean hasImage = (image != null && !image.isEmpty())
-                || (req.getImageUrl() != null && !req.getImageUrl().isBlank());
-        if (!hasImage) throw new IllegalArgumentException("image required");
-        if (req.getStrength() == null) throw new IllegalArgumentException("strength required");
 
-        return useCase.handle(req, image);
+        boolean hasFiles = (images != null && images.stream().anyMatch(f -> f != null && !f.isEmpty()));
+        boolean hasUrls  = req.getImageUrls() != null && req.getImageUrls().stream().anyMatch(u -> u != null && !u.isBlank());
+
+        if (!hasFiles && !hasUrls)
+            throw new IllegalArgumentException("image required");
+
+        return useCase.handle(req, images);
     }
 }

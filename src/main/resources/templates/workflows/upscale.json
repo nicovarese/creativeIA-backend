@@ -1,7 +1,7 @@
 {
   "1": {
     "inputs": {
-      "image": "${image}"
+      "image": "${image_1}"
     },
     "class_type": "LoadImage",
     "_meta": {
@@ -24,6 +24,7 @@
   "7": {
     "inputs": {
       "upscale_method": "lanczos",
+      "resolution_steps": 64,
       "megapixels": 0.5,
       "image": [
         "1",
@@ -114,7 +115,7 @@
   },
   "12": {
     "inputs": {
-      "model": "seedvr2_ema_7b_fp16.safetensors",
+      "model": "seedvr2_ema_3b-Q4_K_M.gguf",
       "device": "cuda:0",
       "blocks_to_swap": 0,
       "swap_io_components": false,

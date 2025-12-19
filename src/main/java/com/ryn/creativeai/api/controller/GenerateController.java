@@ -11,9 +11,11 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import java.util.List;
+
 
 @RestController
-@RequestMapping("/v1/jobs")
+@RequestMapping("/v1/generate")
 @RequiredArgsConstructor
 public class GenerateController {
 
@@ -30,10 +32,10 @@ public class GenerateController {
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public JobResponseDto createMultipart(
             @RequestPart("payload") String payloadJson,
-            @RequestPart(value = "image", required = false) MultipartFile image
+            @RequestPart(value = "image", required = false) List<MultipartFile> images
     ) throws Exception {
         // parseás vos el JSON de la parte "payload"
         CreateJobRequestDto req = objectMapper.readValue(payloadJson, CreateJobRequestDto.class);
-        return dispatcher.dispatch(req, image);
+        return dispatcher.dispatch(req, images);
     }
 }

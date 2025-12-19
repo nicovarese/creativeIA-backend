@@ -115,58 +115,6 @@ public class ComfyUIAdapter implements ImageProviderPort {
         return filename;
     }
 
-    /** Reescribe inputs de imagen (string o arrays) a filename dentro de ComfyUI/input */
-    private void rewriteImageInputs(ObjectNode workflow) throws Exception {
-        Iterator<String> it = workflow.fieldNames();
-        while (it.hasNext()) {
-            String nodeId = it.next();
-            JsonNode node = workflow.get(nodeId);
-            if (node == null || !node.isObject()) continue;
-
-            JsonNode inputs = node.get("inputs");
-            if (inputs == null || !inputs.isObject()) continue;
-
-            // 1) Caso directo: campos de texto que parecen imagen
-            Iterator<String> in = inputs.fieldNames();
-            List<Runnable> writers = new ArrayList<>();
-            while (in.hasNext()) {
-                String field = in.next();
-                JsonNode val = inputs.get(field);
-                if (val == null) continue;
-
-                if (val.isTextual() && isImageFilename(val.asText())) {
-                    String original = val.asText();
-                    String filename = normalizeToComfyFilename(original);
-                    writers.add(() -> ((ObjectNode) inputs).put(field, filename));
-                } else if (val.isArray()) {
-                    boolean touched = false;
-                    List<String> newVals = new ArrayList<>();
-                    for (JsonNode v : val) {
-                        if (v.isTextual() && isImageFilename(v.asText())) {
-                            try {
-                                newVals.add(normalizeToComfyFilename(v.asText()));
-                                touched = true;
-                            } catch (Exception e) {
-                                // si falla uno, dejamos el original de ese item
-                                newVals.add(v.asText());
-                            }
-                        } else if (v.isTextual()) {
-                            newVals.add(v.asText());
-                        }
-                    }
-                    if (touched) {
-                        writers.add(() -> {
-                            var arr = ((ObjectNode) inputs).putArray(field);
-                            newVals.forEach(arr::add);
-                        });
-                    }
-                }
-            }
-            // aplico writes fuera del loop de iteradores
-            writers.forEach(Runnable::run);
-        }
-    }
-
     private String normalizeToComfyFilename(String value) throws Exception {
         Path local = materializeToLocal(value);
         return copyIntoComfyInput(local);
@@ -178,7 +126,6 @@ public class ComfyUIAdapter implements ImageProviderPort {
     public List<String> generate(String compiledWorkflowJson) throws Exception {
         // 1) Parseo y reescribo inputs de imagen a filename dentro de ComfyUI/input
         final ObjectNode workflow = (ObjectNode) M.readTree(compiledWorkflowJson);
-        rewriteImageInputs(workflow);
 
         // 2) Wrap: Comfy espera { "prompt": <workflow-json>, "client_id": "<id>" }
         final ObjectNode body = M.createObjectNode();
