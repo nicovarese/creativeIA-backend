@@ -2,7 +2,7 @@
   "title": "upscale",
   "type": "object",
   "properties": {
-    "image": {
+    "image_1": {
       "type": "string",
       "minLength": 1,
       "pattern": ".+\\.png$",
@@ -14,6 +14,6 @@
       "default": 2048
     }
   },
-  "required": ["image", "resolution"],
+  "required": ["image_1", "resolution"],
   "additionalProperties": false
 }

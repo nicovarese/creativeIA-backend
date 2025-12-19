@@ -183,7 +183,7 @@ public class CreateGenerationJobUseCase {
         List<String> comfyFilenames = stageAllToComfyInput(
                 images,
                 r.getImageUrls(), // List<String>
-                Paths.get("C:/Users/natal/AppData/Roaming/StabilityMatrix/Packages/ComfyUI/input")
+                Paths.get("C:/Users/renzo/StabilityMatrix-win-x64/Data/Packages/ComfyUI/input")
         );
 
         // mapeo a image_1, image_2, ...
