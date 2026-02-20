@@ -17,9 +17,14 @@ public class CorsConfig {
 
         cfg.setAllowedOrigins(List.of("http://localhost:4200"));
         cfg.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
-        cfg.setAllowedHeaders(List.of("Authorization", "Content-Type", "Accept"));
-        cfg.setExposedHeaders(List.of("*"));
-        cfg.setAllowCredentials(true);
+
+        // ✅ clave: dejar pasar headers típicos del browser + multipart
+        cfg.setAllowedHeaders(List.of("*"));
+
+        // ✅ si no necesitás leer headers custom desde el front, dejalo vacío o especificá
+        cfg.setExposedHeaders(List.of("Location"));
+
+        cfg.setAllowCredentials(false);
         cfg.setMaxAge(3600L);
 
         UrlBasedCorsConfigurationSource src = new UrlBasedCorsConfigurationSource();
