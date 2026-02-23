@@ -4,14 +4,18 @@ import com.ryn.creativeai.core.domain.model.Asset;
 import com.ryn.creativeai.core.domain.model.Project;
 import com.ryn.creativeai.infra.AssetRepository;
 import com.ryn.creativeai.infra.ProjectRepository;
+import com.ryn.creativeai.security.CurrentUserService;
 import jakarta.validation.Valid;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.*;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.Map;
 import java.util.UUID;
+
+import static org.springframework.http.HttpStatus.NOT_FOUND;
 
 @RestController
 @RequestMapping("/v1/projects")
@@ -20,19 +24,23 @@ public class ProjectsController {
 
     private final ProjectRepository projects;
     private final AssetRepository assets;
+    private final CurrentUserService currentUser;
 
     /** Crear proyecto simple (name único) */
     @PostMapping
     public Project create(@Valid @RequestBody CreateProjectReq req) {
+        var user = currentUser.requireUser();
         Project p = new Project();
         p.setName(req.getName());
+        p.setOwner(user);
         return projects.save(p);
     }
 
     /** Listar proyectos */
     @GetMapping
     public Page<Project> list(Pageable pageable) {
-        return projects.findAll(pageable);
+        var user = currentUser.requireUser();
+        return projects.findByOwnerId(user.getId(), pageable);
     }
 
     /** Assets de un proyecto (paginado + búsqueda) */
@@ -41,10 +49,14 @@ public class ProjectsController {
                                           @RequestParam(defaultValue = "1") int page,
                                           @RequestParam(defaultValue = "24") int size,
                                           @RequestParam(required = false) String search) {
+        var user = currentUser.requireUser();
+        if (!projects.existsByIdAndOwnerId(projectId, user.getId())) {
+            throw new ResponseStatusException(NOT_FOUND, "Project not found");
+        }
         page = Math.max(page, 1);
         size = Math.min(Math.max(size, 1), 100);
 
-        Page<Asset> p = assets.search(projectId,
+        Page<Asset> p = assets.search(projectId, user.getId(),
                 (search == null || search.isBlank()) ? null : search,
                 PageRequest.of(page - 1, size));
 

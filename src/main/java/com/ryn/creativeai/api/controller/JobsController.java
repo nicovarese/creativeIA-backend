@@ -7,6 +7,7 @@ import com.ryn.creativeai.core.domain.dto.JobAssetDto;
 import com.ryn.creativeai.core.domain.dto.JobResponseDto;
 import com.ryn.creativeai.core.domain.dto.JobSummaryDto;
 import com.ryn.creativeai.infra.JobRepository;
+import com.ryn.creativeai.security.CurrentUserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -30,12 +31,14 @@ public class JobsController {
 
     private final GetJobStatusUseCase getJobStatus;
     private final JobRepository jobs;
+    private final CurrentUserService currentUser;
 
     /** Detalle por id (para polling) */
     @GetMapping("/{id}")
     @Transactional(readOnly = true)
     public ResponseEntity<JobResponseDto> get(@PathVariable UUID id) {
-        return getJobStatus.handle(id)
+        var user = currentUser.requireUser();
+        return getJobStatus.handle(id, user.getId())
                 .map(resp -> ResponseEntity.ok(toDto(resp)))
                 .orElse(ResponseEntity.notFound().build());
     }
@@ -44,8 +47,9 @@ public class JobsController {
     @GetMapping("/{id}/result")
     @Transactional(readOnly = true)
     public ResponseEntity<Void> result(@PathVariable UUID id) {
+        var user = currentUser.requireUser();
         // Usamos el use case que ya agrega los assets
-        var resp = getJobStatus.handle(id)
+        var resp = getJobStatus.handle(id, user.getId())
                 .orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "Job not found"));
 
         var status = parseStatus(resp.status());
@@ -76,8 +80,9 @@ public class JobsController {
     @Transactional(readOnly = true)
     public Page<JobSummaryDto> listByProject(@PathVariable("projectId") UUID projectId,
                                              Pageable pageable) {
+        var user = currentUser.requireUser();
         // El repo devuelve Page<Job> (dominio), así que mapeamos desde Job, no JobEntity
-        return jobs.findByProjectId(projectId, pageable)
+        return jobs.findByProjectIdAndProjectOwnerId(projectId, user.getId(), pageable)
                 .map(this::toSummaryDto);
     }
 
