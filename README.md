@@ -105,3 +105,23 @@ Backend queda en `http://localhost:8080`.
 
 - ComfyUI no es requisito para validar PR1/PR2 de auth/proyectos/biblioteca.
 - Generación de imágenes depende de endpoints de jobs/generate y entorno comfy.
+
+## Resumen de implementación (esta rama)
+
+- PR1:
+  - auth JWT con `register/login/me`
+  - passwords con BCrypt
+  - seguridad stateless con filtro JWT
+  - ownership por usuario en proyectos/jobs/assets
+  - manejo correcto de status:
+    - `401` no autenticado
+    - `403` acceso denegado
+    - `ResponseStatusException` ya no se transforma en `500`
+- CORS dev:
+  - orígenes permitidos:
+    - `http://127.0.0.1:4200`
+    - `http://localhost:4200`
+  - métodos: `GET, POST, PUT, DELETE, OPTIONS`
+  - headers: `Authorization, Content-Type`
+- Nota DB aplicada para PR1:
+  - columna `projects.owner_id` + FK/índice (si la base venía previa al cambio de ownership)
