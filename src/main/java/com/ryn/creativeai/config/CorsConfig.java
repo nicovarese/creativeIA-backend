@@ -14,6 +14,7 @@ public class CorsConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration cfg = new CorsConfiguration();
+        // Dev frontend origins soportados (localhost y loopback explícito).
         cfg.setAllowedOrigins(List.of(
                 "http://127.0.0.1:4200",
                 "http://localhost:4200"

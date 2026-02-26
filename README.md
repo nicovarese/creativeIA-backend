@@ -1,223 +1,107 @@
-# CreativeAI – Backend
+# CreativeIA Backend
 
-Backend **Java 21 + Spring Boot** para generar imágenes a partir de **workflows de ComfyUI** (plantillas JSON).  
-Arquitectura **Hexagonal**, validación por **schema**, y proveedores intercambiables (**mock** / **ComfyUI**).
+Backend Spring Boot (Java 21) para auth, ownership por usuario, proyectos, jobs y assets.
 
----
+## Estado Actual (PR1 + base para PR2)
 
-## ✨ Features
+- Auth JWT:
+  - `POST /v1/auth/register`
+  - `POST /v1/auth/login`
+  - `GET /v1/auth/me`
+- Seguridad stateless:
+  - endpoints protegidos por default
+  - `401` no autenticado
+  - `403` sin permisos
+- Ownership:
+  - `GET /v1/projects` lista solo proyectos del usuario
+  - `POST /v1/projects` crea proyecto con owner autenticado
+  - `GET /v1/projects/{projectId}/assets` valida owner
+  - `GET /v1/jobs/project/{projectId}` valida owner
+  - `GET /v1/jobs/{id}` valida owner
+- CORS dev:
+  - `http://127.0.0.1:4200`
+  - `http://localhost:4200`
 
-- Plantillas JSON de ComfyUI con **placeholders** (`{{key}}`) y compilación segura (**TemplateCompiler**).
-- **Schemas JSON** por template (defaults, required, types, enum, min/max) con **ParamResolver**.
-- Jobs con estados `QUEUED | RUNNING | DONE | FAILED` y assets persistidos.
-- **Adapters**: `Mock` (dev) y `ComfyUI` (prod).
-- Manejo de errores prolijo con `@ControllerAdvice`.
-- Swagger/OpenAPI (solo dev), Flyway, Testcontainers.
+## Requisitos
 
----
+- Java 21
+- Maven Wrapper (`mvnw.cmd`)
+- PostgreSQL local
 
-## 🧱 Arquitectura (Hexagonal)
+## Configuración local
 
-- **core/domain**: entidades y puertos (interfaces).
-- **core/application**: casos de uso y servicios (p.ej. `CreateGenerationJobUseCase`, `TemplateCompiler`,
-  `ParamResolver`).
-- **adapters/**: implementaciones de puertos (p.ej. `FileTemplateRegistry`, `LocalStorageAdapter`, `MockImageProvider`,
-  `ComfyUIAdapter`).
-- **api/**: controladores REST y `ApiExceptionHandler`.
-- **resources/workflows**: plantillas JSON (ComfyUI)
-- **resoruces/schemas**: schemas JSON por plantilla workflows/ # plantillas JSON (ComfyUI)
+Archivo: `src/main/resources/application.properties`
 
-## 📂 Plantillas & Schemas
+- `server.port=8080`
+- `spring.datasource.url=jdbc:postgresql://localhost:5432/postgres`
+- `spring.datasource.username=postgres`
+- `spring.datasource.password=1234`
 
-- Workflows: `src/main/resources/workflows/`
-- Schemas: `src/main/resources/schemas/`
-- Convención: `{templateKey}_{version}.json` y `{templateKey}_{version}.schema.json`
+## Migración mínima requerida para PR1
 
-Ejemplo:
-workflows/flux_simple_v1.json
-schemas/flux_simple_v1.schema.json
+Si la DB ya existía antes del campo owner, asegurate de tener `projects.owner_id`:
 
-**Placeholders**
+```sql
+BEGIN;
 
-- Numéricos en el JSON como `"{{width}}"` → el compiler los reemplaza por `768` (sin comillas).
-- Strings como `"{{prompt}}"`.
+ALTER TABLE projects
+  ADD COLUMN IF NOT EXISTS owner_id uuid;
 
----
+UPDATE projects p
+SET owner_id = u.id
+FROM (
+  SELECT id
+  FROM users
+  ORDER BY created_at ASC
+  LIMIT 1
+) u
+WHERE p.owner_id IS NULL;
 
-## 🔌 API (v1)
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conname = 'fk_projects_owner'
+  ) THEN
+    ALTER TABLE projects
+      ADD CONSTRAINT fk_projects_owner
+      FOREIGN KEY (owner_id) REFERENCES users(id);
+  END IF;
+END$$;
 
-### POST `/api/generate`
+CREATE INDEX IF NOT EXISTS idx_projects_owner_id ON projects(owner_id);
 
-Crea un Job a partir de un template + params.
+ALTER TABLE projects
+  ALTER COLUMN owner_id SET NOT NULL;
 
-**Request**
-
-```json
-{
-  "template": "flux_simple",
-  "version": "v1",
-  "provider": "mock",
-  "params": {
-    "prompt": "A Victorian closeup a Scottish woman with a shocked face",
-    "width": 768,
-    "height": 1024
-  }
-}
+COMMIT;
 ```
 
-**Response 200**
+## Build
 
-```json
-{
-  "jobId": "c67f3c56-11e2-4b97-9e84-...",
-  "status": "QUEUED"
-}
+```bash
+./mvnw.cmd -DskipTests package
 ```
 
-### GET `/api/jobs/{id}`
+## Run
 
-Devuelve el estado y los assets (cuando estén listos).
-
-**Response**
-
-```json
-{
-  "id": "...",
-  "status": "DONE",
-  "assets": [
-    {
-      "url": "/assets/job_123.png",
-      "width": 768,
-      "height": 1024
-    }
-  ]
-}
+```bash
+./mvnw.cmd spring-boot:run
 ```
 
-En dev se sirven archivos estáticos desde ./assets como /assets/**.
+Backend queda en `http://localhost:8080`.
 
-## 🚦 Validación & Errores
+## Endpoints útiles para validación manual
 
-#DTOs con @Valid (estructura del request).
+- `POST /v1/auth/register`
+- `POST /v1/auth/login`
+- `GET /v1/auth/me` (Bearer token)
+- `GET /v1/projects` (Bearer token)
+- `POST /v1/projects` (Bearer token)
+- `GET /v1/projects/{projectId}/assets` (Bearer token)
 
-ParamResolver valida params contra el schema (required, tipos, enum, min/max, additionalProperties).
+## Notas
 
-ApiExceptionHandler traduce:
-
-- IllegalArgumentException → 400 invalid_parameters
-
-- JSON mal formado → 400 malformed_json
-
-- @Valid falló → 400 validation_error
-
-- Error inesperado → 500 internal_error
-
-**Ejemplo 400**
-
-```json
-{
-  "status": 400,
-  "code": "invalid_parameters",
-  "message": "Falta parámetro requerido: height"
-}
-```
-
-# A partir de aca todo esta pendiente de desarrollo (tanto en implementacion como documentacion)
-
-## ⚙️ Configuración
-
-application.yml (ejemplo)
-
-server:
-port: 8080
-
-storage:
-assetsDir: ./assets
-
-comfy:
-baseUrl: http://localhost:8188
-
-spring:
-jpa:
-hibernate:
-ddl-auto: validate
-
-## ▶️ Ejecutar en local
-
-Postgres 16 corriendo.
-
-Flyway corre al levantar.
-
-App:
-
-mvn spring-boot:run
-
-curl de prueba
-
-curl -X POST http://localhost:8080/api/generate \
--H 'Content-Type: application/json' \
--d '{
-"template":"flux_simple","version":"v1","provider":"mock",
-"params":{"prompt":"hola","width":768,"height":1024}
-}'
-
-## 🐘 Base de datos (Flyway)
-
-Migraciones en src/main/resources/db/migration.
-
-Tablas principales:
-
-jobs(id, template_key, template_ver, provider, status, compiled_json, error_message, created_at, updated_at)
-
-assets(id, job_id, url, width, height, created_at)
-
-## 🖼️ Integración con ComfyUI
-
-Instalar/ejecutar ComfyUI (p.ej. http://localhost:8188).
-
-Colocar modelos requeridos por tu workflow.
-
-Usar provider: "comfyui" o perfil prod.
-
-El adapter envía /prompt, hace polling de /history/{prompt_id} y copia imágenes a ./assets.
-
-## 🧪 Tests
-
-Unit: TemplateCompiler, ParamResolver, UseCases.
-
-Integración: Testcontainers (Postgres).
-
-MockMvc: tests de endpoints.
-
-## 🔐 Seguridad (básico)
-
-API Key/JWT por cliente (pendiente).
-
-Rate limiting por tenant (pendiente).
-
-CORS restringido al front.
-
-## 📈 Observabilidad
-
-Actuator: /actuator/health, /actuator/metrics, /actuator/prometheus.
-
-Micrometer + Prometheus (pendiente).
-
-Logs estructurados JSON (pendiente).
-
-## 🗺️ Roadmap corto
-
-Adapter ComfyUI con timeouts/retries y circuit breaker.
-
-Idempotency-Key en POST /api/generate.
-
-Almacenamiento S3/MinIO + CDN.
-
-Multi-tenant (orgs, planes, cuotas).
-
-Webhooks job.completed.
-
-## 📄 Licencia
-
-Privado
-
+- ComfyUI no es requisito para validar PR1/PR2 de auth/proyectos/biblioteca.
+- Generación de imágenes depende de endpoints de jobs/generate y entorno comfy.
