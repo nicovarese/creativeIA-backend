@@ -21,6 +21,7 @@ import com.ryn.creativeai.infra.JobRepository;
 import com.ryn.creativeai.infra.ProjectRepository;
 import jakarta.annotation.Nullable;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.task.TaskExecutor;
 import org.springframework.stereotype.Service;
@@ -43,6 +44,7 @@ import java.util.*;
  */
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class CreateGenerationJobUseCase {
 
     private static final ObjectMapper SCHEMA_MAPPER = new ObjectMapper();
@@ -63,6 +65,8 @@ public class CreateGenerationJobUseCase {
     private final JobEventsHub eventsHub;
     @Value("${comfy.inputDir:./ComfyUI/input}")
     private String comfyInputDir;
+    @Value("${creativeai.generation.fallback-to-mock-on-error:true}")
+    private boolean fallbackToMockOnError;
 
     // decide el templateKey según flow + cantidad de loras
     private String selectTemplateKey(Flow flow, int loraCount, int imageCount) {
@@ -258,7 +262,7 @@ public class CreateGenerationJobUseCase {
             eventsHub.send(jobId, "PROGRESS", statusPayload(job));
 
             var provider = requireProvider(job.getProvider());
-            var localPaths = provider.generate(job.getCompiledJson());
+            var localPaths = generateWithFallback(provider, job);
 
 
             // 2) guardando en storage
@@ -354,6 +358,23 @@ public class CreateGenerationJobUseCase {
     private ImageProviderPort requireProvider(String providerKey) {
         return Optional.ofNullable(providers.get(providerKey))
                 .orElseThrow(() -> new IllegalStateException("Proveedor no registrado: " + providerKey));
+    }
+
+    private List<String> generateWithFallback(ImageProviderPort provider, Job job) throws Exception {
+        try {
+            return provider.generate(job.getCompiledJson());
+        } catch (Exception ex) {
+            if (!fallbackToMockOnError || !"comfyui".equalsIgnoreCase(job.getProvider())) {
+                throw ex;
+            }
+            var mock = providers.get("mock");
+            if (mock == null) {
+                throw ex;
+            }
+            log.warn("ComfyUI falló para job {}. Aplicando fallback mock temporal para testing de UI. Error: {}",
+                    job.getId(), ex.getMessage());
+            return mock.generate(job.getCompiledJson());
+        }
     }
 
 
