@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.Map;
+import java.util.Locale;
 import java.util.UUID;
 
 import static org.springframework.http.HttpStatus.NOT_FOUND;
@@ -55,9 +56,12 @@ public class ProjectsController {
         }
         page = Math.max(page, 1);
         size = Math.min(Math.max(size, 1), 100);
+        String qPattern = (search == null || search.isBlank())
+                ? null
+                : "%" + search.trim().toLowerCase(Locale.ROOT) + "%";
 
         Page<Asset> p = assets.search(projectId, user.getId(),
-                (search == null || search.isBlank()) ? null : search,
+                qPattern,
                 PageRequest.of(page - 1, size));
 
         return Map.of(
