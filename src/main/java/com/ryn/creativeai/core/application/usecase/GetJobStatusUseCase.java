@@ -1,5 +1,6 @@
 package com.ryn.creativeai.core.application.usecase;
 
+import com.ryn.creativeai.core.application.service.JobPhaseResolver;
 import com.ryn.creativeai.infra.AssetRepository;
 import com.ryn.creativeai.infra.JobRepository;
 import lombok.RequiredArgsConstructor;
@@ -20,6 +21,8 @@ public class GetJobStatusUseCase {
                     j.getId(),
                     j.getStatus().name(),
                     j.getFlow(),
+                    j.getProgress(),
+                    JobPhaseResolver.resolve(j.getStatus(), j.getProgress()),
                     j.getErrorMessage(),
                     a.stream().map(aa -> new Image(
                             aa.getUrl(), aa.getWidth(), aa.getHeight()
@@ -35,6 +38,8 @@ public class GetJobStatusUseCase {
                     j.getId(),
                     j.getStatus().name(),
                     j.getFlow(),
+                    j.getProgress(),
+                    JobPhaseResolver.resolve(j.getStatus(), j.getProgress()),
                     j.getErrorMessage(),
                     a.stream().map(aa -> new Image(
                             aa.getUrl(), aa.getWidth(), aa.getHeight()
@@ -44,7 +49,15 @@ public class GetJobStatusUseCase {
     }
 
     //           ↓↓↓  agregado flow y errorMessage
-    public record Response(UUID jobId, String status, String flow, String errorMessage, List<Image> assets) {}
+    public record Response(
+            UUID jobId,
+            String status,
+            String flow,
+            Integer progress,
+            String phase,
+            String errorMessage,
+            List<Image> assets
+    ) {}
 
     public record Image(String url, Integer w, Integer h) {}
 }

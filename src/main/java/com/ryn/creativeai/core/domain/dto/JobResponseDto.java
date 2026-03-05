@@ -8,6 +8,8 @@ public record JobResponseDto(
         UUID id,
         JobStatus status,
         String flow,
+        Integer progress,
+        String phase,
         List<JobAssetDto> assets,
         String error
 ) {}

@@ -3,6 +3,7 @@ package com.ryn.creativeai.core.application.usecase;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ryn.creativeai.core.application.service.JobEventsHub;
+import com.ryn.creativeai.core.application.service.JobPhaseResolver;
 import com.ryn.creativeai.core.application.service.LoraCatalog;
 import com.ryn.creativeai.core.application.service.ParamResolver;
 import com.ryn.creativeai.core.application.service.TemplateCompiler;
@@ -20,6 +21,7 @@ import com.ryn.creativeai.infra.JobRepository;
 import com.ryn.creativeai.infra.ProjectRepository;
 import jakarta.annotation.Nullable;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.task.TaskExecutor;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
@@ -45,7 +47,7 @@ public class CreateGenerationJobUseCase {
 
     private static final ObjectMapper SCHEMA_MAPPER = new ObjectMapper();
 
-    private static final String DEFAULT_PROVIDER = "comfy"; // key del MockImageProviderAdapter
+    private static final String DEFAULT_PROVIDER = "comfyui";
     private static final String DEFAULT_VERSION  = "v1";   // versión por defecto de plantillas   // <-- ajustá si versionás plantillas
 
     private final ProjectRepository projects;
@@ -59,6 +61,8 @@ public class CreateGenerationJobUseCase {
     private final TaskExecutor taskExecutor;
     private final LoraCatalog loraCatalog;
     private final JobEventsHub eventsHub;
+    @Value("${comfy.inputDir:./ComfyUI/input}")
+    private String comfyInputDir;
 
     // decide el templateKey según flow + cantidad de loras
     private String selectTemplateKey(Flow flow, int loraCount, int imageCount) {
@@ -147,6 +151,8 @@ public class CreateGenerationJobUseCase {
                 job.getId(),
                 JobStatus.QUEUED,          // ✅ pasa directamente el enum, no el name()
                 req.getFlow().name(),      // ✅ convierte Flow (enum) → String
+                job.getProgress(),
+                JobPhaseResolver.resolve(job.getStatus(), job.getProgress()),
                 List.of(),
                 null
         );
@@ -183,7 +189,7 @@ public class CreateGenerationJobUseCase {
         List<String> comfyFilenames = stageAllToComfyInput(
                 images,
                 r.getImageUrls(), // List<String>
-                Paths.get("C:/Users/renzo/StabilityMatrix-win-x64/Data/Packages/ComfyUI/input")
+                Paths.get(comfyInputDir)
         );
 
         // mapeo a image_1, image_2, ...
@@ -242,11 +248,12 @@ public class CreateGenerationJobUseCase {
         var job = jobs.findById(jobId).orElseThrow();
         try {
             job.markRunning();
+            job.setProgressSafe(10);
             jobs.save(job);
             eventsHub.send(jobId, "STARTED", statusPayload(job));
 
             // 1) enviar al provider
-            job.setProgressSafe(20);
+            job.setProgressSafe(35);
             jobs.save(job);
             eventsHub.send(jobId, "PROGRESS", statusPayload(job));
 
@@ -281,6 +288,7 @@ public class CreateGenerationJobUseCase {
                     "id", jobId,
                     "status", job.getStatus().name(),
                     "progress", job.getProgress(),
+                    "phase", JobPhaseResolver.resolve(job.getStatus(), job.getProgress()),
                     "error", job.getErrorMessage()
             ));
         } finally {
@@ -292,7 +300,8 @@ public class CreateGenerationJobUseCase {
         return Map.of(
                 "id", j.getId(),
                 "status", j.getStatus().name(),
-                "progress", j.getProgress()
+                "progress", j.getProgress(),
+                "phase", JobPhaseResolver.resolve(j.getStatus(), j.getProgress())
         );
     }
 
@@ -305,6 +314,7 @@ public class CreateGenerationJobUseCase {
                 "id", jobId,
                 "status", j.getStatus().name(),
                 "progress", j.getProgress(),
+                "phase", JobPhaseResolver.resolve(j.getStatus(), j.getProgress()),
                 "assets", imgs
         );
     }
