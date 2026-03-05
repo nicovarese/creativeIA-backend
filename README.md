@@ -1,127 +1,141 @@
 # CreativeIA Backend
 
-Backend Spring Boot (Java 21) para auth, ownership por usuario, proyectos, jobs y assets.
+Backend API para autenticación, proyectos por usuario, generación de imágenes (jobs) y biblioteca de assets.
 
-## Estado Actual (PR1 + base para PR2)
+## 1. Stack
 
-- Auth JWT:
+- Java 21
+- Spring Boot 3.5.5
+- Spring Security (JWT stateless)
+- Spring Data JPA + PostgreSQL
+- WebFlux client (`WebClient`) para integración con ComfyUI
+
+## 2. Qué resuelve hoy
+
+- Auth:
   - `POST /v1/auth/register`
   - `POST /v1/auth/login`
   - `GET /v1/auth/me`
-- Seguridad stateless:
-  - endpoints protegidos por default
-  - `401` no autenticado
-  - `403` sin permisos
-- Ownership:
-  - `GET /v1/projects` lista solo proyectos del usuario
-  - `POST /v1/projects` crea proyecto con owner autenticado
-  - `GET /v1/projects/{projectId}/assets` valida owner
-  - `GET /v1/jobs/project/{projectId}` valida owner
-  - `GET /v1/jobs/{id}` valida owner
-- CORS dev:
-  - `http://127.0.0.1:4200`
-  - `http://localhost:4200`
+- Ownership por usuario autenticado:
+  - Proyectos
+  - Jobs
+  - Assets por proyecto
+- Generación:
+  - `POST /v1/generate` (JSON o multipart)
+  - polling de estado de job
+  - SSE opcional por job
 
-## Requisitos
+## 3. Requisitos
 
-- Java 21
-- Maven Wrapper (`mvnw.cmd`)
-- PostgreSQL local
+- JDK 21 instalado
+- PostgreSQL 14+ (probado en 16)
+- Maven Wrapper (`mvnw` / `mvnw.cmd`)
 
-## Configuración local
+## 4. Configuración local
 
 Archivo: `src/main/resources/application.properties`
+
+Variables principales:
 
 - `server.port=8080`
 - `spring.datasource.url=jdbc:postgresql://localhost:5432/postgres`
 - `spring.datasource.username=postgres`
 - `spring.datasource.password=1234`
+- `spring.jpa.hibernate.ddl-auto=update`
+- `app.jwt.secret=<secret de al menos 32 chars>`
+- `app.jwt.expiresMinutes=120`
+- `comfy.baseUrl=http://127.0.0.1:8188`
+- `comfy.inputDir=<ruta real a ComfyUI/input>`
+- `comfy.downloadDir=./tmp/comfy`
+- `storage.assetsDir=./assets`
 
-## Migración mínima requerida para PR1
+Notas:
 
-Si la DB ya existía antes del campo owner, asegurate de tener `projects.owner_id`:
+- En `dev` se permite CORS para `http://127.0.0.1:4200` y `http://localhost:4200`.
+- Si no levantás ComfyUI, el flujo de generación real puede fallar según provider activo.
 
-```sql
-BEGIN;
+## 5. Levantar proyecto
 
-ALTER TABLE projects
-  ADD COLUMN IF NOT EXISTS owner_id uuid;
+Windows (PowerShell):
 
-UPDATE projects p
-SET owner_id = u.id
-FROM (
-  SELECT id
-  FROM users
-  ORDER BY created_at ASC
-  LIMIT 1
-) u
-WHERE p.owner_id IS NULL;
-
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1
-    FROM pg_constraint
-    WHERE conname = 'fk_projects_owner'
-  ) THEN
-    ALTER TABLE projects
-      ADD CONSTRAINT fk_projects_owner
-      FOREIGN KEY (owner_id) REFERENCES users(id);
-  END IF;
-END$$;
-
-CREATE INDEX IF NOT EXISTS idx_projects_owner_id ON projects(owner_id);
-
-ALTER TABLE projects
-  ALTER COLUMN owner_id SET NOT NULL;
-
-COMMIT;
+```powershell
+./mvnw spring-boot:run
 ```
 
-## Build
+Build sin tests:
 
-```bash
-./mvnw.cmd -DskipTests package
+```powershell
+./mvnw -DskipTests package
 ```
 
-## Run
+## 6. Modelo funcional (resumen)
 
-```bash
-./mvnw.cmd spring-boot:run
-```
+- `User` autentica por JWT.
+- `Project` pertenece a un `owner` (`User`).
+- `Job` pertenece a un `Project` y guarda estado/progreso.
+- `Asset` pertenece a `Job` y `Project`.
 
-Backend queda en `http://localhost:8080`.
+## 7. Endpoints principales
 
-## Endpoints útiles para validación manual
+### Auth
 
 - `POST /v1/auth/register`
 - `POST /v1/auth/login`
-- `GET /v1/auth/me` (Bearer token)
-- `GET /v1/projects` (Bearer token)
-- `POST /v1/projects` (Bearer token)
-- `GET /v1/projects/{projectId}/assets` (Bearer token)
+- `GET /v1/auth/me`
 
-## Notas
+### Proyectos
 
-- ComfyUI no es requisito para validar PR1/PR2 de auth/proyectos/biblioteca.
-- Generación de imágenes depende de endpoints de jobs/generate y entorno comfy.
+- `GET /v1/projects`
+- `POST /v1/projects`
+- `GET /v1/projects/{projectId}/assets?page=1&size=24&search=...`
 
-## Resumen de implementación (esta rama)
+### Generación
 
-- PR1:
-  - auth JWT con `register/login/me`
-  - passwords con BCrypt
-  - seguridad stateless con filtro JWT
-  - ownership por usuario en proyectos/jobs/assets
-  - manejo correcto de status:
-    - `401` no autenticado
-    - `403` acceso denegado
-    - `ResponseStatusException` ya no se transforma en `500`
-- CORS dev:
-  - orígenes permitidos:
-    - `http://127.0.0.1:4200`
-    - `http://localhost:4200`
-  - métodos: `GET, POST, PUT, DELETE, OPTIONS`
-  - headers: `Authorization, Content-Type`
-- Nota DB aplicada para PR1:
-  - columna `projects.owner_id` + FK/índice (si la base venía previa al cambio de ownership)
+- `POST /v1/generate` (JSON)
+- `POST /v1/generate` (multipart, partes: `payload`, `image`)
+
+### Jobs
+
+- `GET /v1/jobs/{id}`
+- `GET /v1/jobs/{id}/result`
+- `GET /v1/jobs/{id}/events` (SSE)
+- `GET /v1/jobs/project/{projectId}`
+
+## 8. Contrato de estado de job
+
+`GET /v1/jobs/{id}` devuelve:
+
+- `id`
+- `status` (`QUEUED | RUNNING | DONE | FAILED`)
+- `flow`
+- `progress` (0..100)
+- `phase` (`QUEUED | PREPARING | GENERATING | STORING | DONE | FAILED`)
+- `assets[]`
+- `error`
+
+## 9. Seguridad
+
+- Stateless JWT (`Authorization: Bearer <token>`).
+- `401` cuando no hay autenticación válida.
+- `403` cuando hay autenticación pero no permisos.
+- Todo protegido salvo:
+  - `/v1/auth/**`
+  - Swagger (`/swagger-ui/**`, `/v3/api-docs/**`) si está habilitado
+  - `OPTIONS` (preflight CORS)
+
+## 10. Troubleshooting rápido
+
+- Error `Unrecognized 'hibernate.hbm2ddl.auto'`:
+  - Verificar `spring.jpa.hibernate.ddl-auto=update`.
+- Error de ownership por columna:
+  - Verificar que exista `projects.owner_id` y FK a `users(id)`.
+- 401 desde frontend:
+  - Confirmar token en `Authorization` y que no esté expirado.
+- CORS preflight:
+  - Confirmar origin exacto (`127.0.0.1:4200` o `localhost:4200`).
+
+## 11. Siguiente estándar recomendado
+
+- Migraciones versionadas (Flyway/Liquibase).
+- DTOs de respuesta para `Project` (evitar exponer entidad JPA directa).
+- Trazabilidad de jobs (request id, métricas, tiempos por fase).
