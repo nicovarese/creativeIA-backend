@@ -45,6 +45,7 @@ target/
 assets/
 tmp/
 data/
+ComfyUI/
 
 # === OS-specific ===
 # macOS

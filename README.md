@@ -54,6 +54,7 @@ Con eso el backend arranca usando:
 - base H2 persistente en `./data/creativeai`
 - assets en `./assets`
 - directorio temporal en `./tmp/comfy`
+- inputs de ComfyUI en `C:/Users/renzo/StabilityMatrix-win-x64/Data/Packages/ComfyUI/input`
 - JWT local de desarrollo
 - fallback mock si ComfyUI falla
 
@@ -82,7 +83,7 @@ H2_CONSOLE_PATH=/h2-console
 STORAGE_ASSETS_DIR=./assets
 
 COMFY_BASE_URL=http://127.0.0.1:8188
-COMFY_INPUT_DIR=./ComfyUI/input
+COMFY_INPUT_DIR=C:/Users/renzo/StabilityMatrix-win-x64/Data/Packages/ComfyUI/input
 COMFY_DOWNLOAD_DIR=./tmp/comfy
 GENERATION_FALLBACK_TO_MOCK=true
 
