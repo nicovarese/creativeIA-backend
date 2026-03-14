@@ -32,6 +32,12 @@ public class Asset {
     @Column(nullable = false, length = 255)
     private String url;
 
+    @Column(name = "display_name", length = 255)
+    private String displayName;
+
+    @Column(name = "prompt", length = 2000)
+    private String prompt;
+
     @Column private Integer width;   // dejalos nullable si el provider no los sabe
     @Column private Integer height;
 }

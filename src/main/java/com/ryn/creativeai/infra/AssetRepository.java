@@ -16,7 +16,9 @@ public interface AssetRepository extends JpaRepository<Asset, UUID> {
     WHERE a.project.id = :projectId
       AND a.project.owner.id = :ownerId
       AND (:qPattern IS NULL OR LOWER(a.url) LIKE :qPattern
-           OR LOWER(a.flow) LIKE :qPattern)
+           OR LOWER(a.flow) LIKE :qPattern
+           OR LOWER(COALESCE(a.displayName, '')) LIKE :qPattern
+           OR LOWER(COALESCE(a.prompt, '')) LIKE :qPattern)
     ORDER BY a.createdAt DESC
   """)
     Page<Asset> search(@Param("projectId") UUID projectId,
