@@ -49,6 +49,8 @@ public class ComfyUIAdapter implements ImageProviderPort {
 
     /** Extensiones válidas para imágenes */
     private static final Set<String> IMG_EXT = Set.of(".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif");
+    /** Extensiones de video soportadas */
+    private static final Set<String> VIDEO_EXT = Set.of(".mp4", ".webm", ".mov");
 
     private boolean isImageFilename(String s) {
         if (s == null || s.isBlank()) return false;

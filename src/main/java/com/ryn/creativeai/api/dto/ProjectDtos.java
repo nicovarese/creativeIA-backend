@@ -27,6 +27,8 @@ public class ProjectDtos {
             String url,
             String flow,
             OffsetDateTime createdAt,
+            boolean favorite,
+            String mimeType,
             String displayName,
             String prompt,
             Integer width,

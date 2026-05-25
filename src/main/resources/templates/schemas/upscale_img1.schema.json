@@ -12,8 +12,13 @@
     "resolution": {
       "type": "integer",
       "default": 2048
+    },
+    "seed": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 2147483647
     }
   },
-  "required": ["image_1", "resolution"],
+  "required": ["image_1", "resolution", "seed"],
   "additionalProperties": false
 }

@@ -1,7 +1,9 @@
 package com.ryn.creativeai.core.application.service;
 
+import com.ryn.creativeai.adapters.flow.Image2VideoAdapter;
 import com.ryn.creativeai.adapters.flow.Img2ImgAdapter;
 import com.ryn.creativeai.adapters.flow.MockUpAdapter;
+import com.ryn.creativeai.adapters.flow.ProductSceneAdapter;
 import com.ryn.creativeai.adapters.flow.Txt2ImgAdapter;
 import com.ryn.creativeai.adapters.flow.UpscaleAdapter;
 import com.ryn.creativeai.core.domain.dto.CreateJobRequestDto;
@@ -27,13 +29,17 @@ public class FlowDispatcher {
             Txt2ImgAdapter txt2img,
             Img2ImgAdapter img2img,
             UpscaleAdapter upscale,
-            MockUpAdapter mockup
+            MockUpAdapter mockup,
+            ProductSceneAdapter productScene,
+            Image2VideoAdapter image2video
     ) {
         Map<Flow, FlowPort> map = new EnumMap<>(Flow.class);
         map.put(Flow.txt2img, txt2img);
         map.put(Flow.img2img, img2img);
         map.put(Flow.upscale, upscale);
         map.put(Flow.mockup, mockup);
+        map.put(Flow.product_scene, productScene);
+        map.put(Flow.image2video, image2video);
         this.handlers = Map.copyOf(map);
     }
 

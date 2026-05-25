@@ -40,4 +40,11 @@ public class Asset {
 
     @Column private Integer width;   // dejalos nullable si el provider no los sabe
     @Column private Integer height;
+
+    @Column(nullable = false)
+    private boolean favorite = false;
+
+    /** MIME del archivo guardado (image/png, image/jpeg, video/mp4, ...). */
+    @Column(name = "mime_type", nullable = false, length = 64)
+    private String mimeType = "image/png";
 }

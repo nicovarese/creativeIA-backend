@@ -11,5 +11,6 @@ public record JobResponseDto(
         Integer progress,
         String phase,
         List<JobAssetDto> assets,
-        String error
+        String error,
+        Long seed
 ) {}

@@ -1,7 +1,7 @@
 package com.ryn.creativeai.core.application.usecase;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.ryn.creativeai.core.application.service.JobEventsHub;
+import com.ryn.creativeai.api.exception.TemplateLoadingException;
 import com.ryn.creativeai.core.application.service.JobPhaseResolver;
 import com.ryn.creativeai.core.application.service.LoraCatalog;
 import com.ryn.creativeai.core.application.service.ParamResolver;
@@ -41,6 +41,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.ThreadLocalRandom;
 
 import static org.springframework.http.HttpStatus.NOT_FOUND;
 
@@ -63,7 +64,6 @@ public class CreateGenerationJobUseCase {
     private final AssetRepository assets;
     private final TaskExecutor taskExecutor;
     private final LoraCatalog loraCatalog;
-    private final JobEventsHub eventsHub;
     private final CurrentUserService currentUser;
 
     @Value("${comfy.inputDir:./ComfyUI/input}")
@@ -79,13 +79,18 @@ public class CreateGenerationJobUseCase {
     private boolean fallbackToMockOnError;
 
     public JobResponseDto handle(CreateJobRequestDto req, @Nullable List<MultipartFile> images) {
+        if (req.getSeed() == null) {
+            req.setSeed((long) ThreadLocalRandom.current().nextInt(1, Integer.MAX_VALUE));
+        }
+
         var brandSpec = loraCatalog.brandProduct(emptyToNull(req.getBrand()), emptyToNull(req.getProduct()));
         var styleSpec = loraCatalog.style(emptyToNull(req.getStyle()));
         int loraCount = (brandSpec.isPresent() ? 1 : 0) + (styleSpec.isPresent() ? 1 : 0);
         int imageCount = countImages(images, req.getImageUrls());
 
-        String templateKey = selectTemplateKey(req.getFlow(), loraCount, imageCount);
-        TemplateDef def = loadFromClasspath(templateKey);
+        ResolvedTemplate resolved = resolveTemplate(req.getFlow(), loraCount, imageCount);
+        String templateKey = resolved.key();
+        TemplateDef def = resolved.def();
 
         Map<String, Object> raw = buildRawParams(req, images);
         brandSpec.ifPresent(spec -> {
@@ -122,6 +127,7 @@ public class CreateGenerationJobUseCase {
         job.setStyle(emptyToNull(req.getStyle()));
         job.setBrand(emptyToNull(req.getBrand()));
         job.setProduct(emptyToNull(req.getProduct()));
+        job.setSeed(req.getSeed());
         job.setStrength(req.getStrength());
         job.setResolution(req.getResolution());
         job.setScale(req.getScale());
@@ -138,33 +144,47 @@ public class CreateGenerationJobUseCase {
                 job.getProgress(),
                 JobPhaseResolver.resolve(job.getStatus(), job.getProgress()),
                 List.of(),
-                null
+                null,
+                job.getSeed()
         );
     }
 
     private UUID parseProjectId(String projectId) {
+        if (projectId == null || projectId.isBlank()) {
+            throw new IllegalArgumentException("projectId must be a valid UUID");
+        }
         try {
             return UUID.fromString(projectId);
         } catch (IllegalArgumentException ex) {
-            throw new IllegalArgumentException("projectId must be a valid UUID");
+            throw new IllegalArgumentException("projectId must be a valid UUID", ex);
         }
     }
 
-    private String selectTemplateKey(Flow flow, int loraCount, int imageCount) {
+    private List<String> templateCandidates(Flow flow, int loraCount, int imageCount) {
         String base = switch (flow) {
             case txt2img -> "txt2img";
             case img2img -> "img2img";
             case upscale -> "upscale";
             case mockup -> "mockup";
+            case product_scene -> "product_scene";
+            case image2video -> "image2video";
         };
 
-        String byLora = switch (loraCount) {
-            case 0 -> base;
-            case 1 -> base + "_lora1";
-            default -> base + "_lora2";
-        };
+        List<String> loraSuffixes = new ArrayList<>();
+        for (int l = Math.min(loraCount, 2); l >= 0; l--) {
+            loraSuffixes.add(l == 0 ? "" : "_lora" + l);
+        }
 
-        return imageCount > 0 ? byLora + "_img" + imageCount : byLora;
+        List<String> candidates = new ArrayList<>();
+        for (int n = imageCount; n >= 1; n--) {
+            for (String suffix : loraSuffixes) {
+                candidates.add(base + suffix + "_img" + n);
+            }
+        }
+        for (String suffix : loraSuffixes) {
+            candidates.add(base + suffix);
+        }
+        return candidates;
     }
 
     private Map<String, Object> buildRawParams(CreateJobRequestDto request, @Nullable List<MultipartFile> images) {
@@ -175,6 +195,7 @@ public class CreateGenerationJobUseCase {
         putIfNotNull(params, "width", request.getWidth());
         putIfNotNull(params, "height", request.getHeight());
         putIfNotNull(params, "batch", request.getBatch());
+        putIfNotNull(params, "seed", request.getSeed());
         putIfNotNull(params, "style", emptyToNull(request.getStyle()));
         putIfNotNull(params, "brand", emptyToNull(request.getBrand()));
         putIfNotNull(params, "product", emptyToNull(request.getProduct()));
@@ -221,6 +242,28 @@ public class CreateGenerationJobUseCase {
 
     private record TemplateDef(String json, String schemaJson) {}
 
+    private record ResolvedTemplate(String key, TemplateDef def) {}
+
+    private ResolvedTemplate resolveTemplate(Flow flow, int loraCount, int imageCount) {
+        List<String> candidates = templateCandidates(flow, loraCount, imageCount);
+        TemplateLoadingException last = null;
+        for (String key : candidates) {
+            try {
+                TemplateDef def = loadFromClasspath(key);
+                if (!candidates.get(0).equals(key)) {
+                    log.warn("Template '{}' no encontrado, usando fallback '{}'", candidates.get(0), key);
+                }
+                return new ResolvedTemplate(key, def);
+            } catch (TemplateLoadingException ex) {
+                last = ex;
+            }
+        }
+        throw new TemplateLoadingException(
+                "Ningun template disponible para flow=" + flow + " (probados: " + candidates + ")",
+                last
+        );
+    }
+
     private TemplateDef loadFromClasspath(String key) {
         String workflowJson = registry.readClasspath("workflows/" + key + ".json");
         String schemaJson = registry.readClasspath("schemas/" + key + ".schema.json");
@@ -233,18 +276,15 @@ public class CreateGenerationJobUseCase {
             job.markRunning();
             job.setProgressSafe(10);
             jobs.save(job);
-            eventsHub.send(jobId, "STARTED", statusPayload(job));
 
             job.setProgressSafe(35);
             jobs.save(job);
-            eventsHub.send(jobId, "PROGRESS", statusPayload(job));
 
             ImageProviderPort provider = requireProvider(job.getProvider());
             List<String> localPaths = generateWithFallback(provider, job);
 
             job.setProgressSafe(70);
             jobs.save(job);
-            eventsHub.send(jobId, "PROGRESS", statusPayload(job));
 
             List<StoragePort.StoredImage> storedImages = storage.store(localPaths);
             for (StoragePort.StoredImage stored : storedImages) {
@@ -257,54 +297,18 @@ public class CreateGenerationJobUseCase {
                 asset.setPrompt(job.getPrompt());
                 asset.setWidth(stored.w());
                 asset.setHeight(stored.h());
+                if (stored.mimeType() != null) {
+                    asset.setMimeType(stored.mimeType());
+                }
                 assets.save(asset);
             }
 
             job.markDone();
             jobs.save(job);
-            eventsHub.send(jobId, "DONE", resultPayload(jobId));
         } catch (Exception ex) {
             job.markFailed(ex.getMessage());
             jobs.save(job);
-            eventsHub.send(jobId, "FAILED", Map.of(
-                    "id", jobId,
-                    "status", job.getStatus().name(),
-                    "progress", job.getProgress(),
-                    "phase", JobPhaseResolver.resolve(job.getStatus(), job.getProgress()),
-                    "error", job.getErrorMessage()
-            ));
-        } finally {
-            eventsHub.complete(jobId);
         }
-    }
-
-    private Map<String, Object> statusPayload(Job job) {
-        return Map.of(
-                "id", job.getId(),
-                "status", job.getStatus().name(),
-                "progress", job.getProgress(),
-                "phase", JobPhaseResolver.resolve(job.getStatus(), job.getProgress())
-        );
-    }
-
-    private Map<String, Object> resultPayload(UUID jobId) {
-        List<Map<String, Object>> images = assets.findByJobId(jobId).stream()
-                .map(asset -> {
-                    Map<String, Object> item = new HashMap<>();
-                    item.put("url", asset.getUrl());
-                    item.put("width", asset.getWidth());
-                    item.put("height", asset.getHeight());
-                    return item;
-                })
-                .toList();
-        Job job = jobs.findById(jobId).orElseThrow();
-        return Map.of(
-                "id", jobId,
-                "status", job.getStatus().name(),
-                "progress", job.getProgress(),
-                "phase", JobPhaseResolver.resolve(job.getStatus(), job.getProgress()),
-                "assets", images
-        );
     }
 
     private static void putIfNotNull(Map<String, Object> map, String key, Object value) {

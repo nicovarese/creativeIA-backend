@@ -14,6 +14,7 @@ public class CreateJobRequestDto {
 
     private String prompt;
     private Integer width, height, batch;
+    private Long seed; // opcional; si viene null el back genera uno aleatorio
 
     private String style;   // "Ninguno" => null
     private String brand;

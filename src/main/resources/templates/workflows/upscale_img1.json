@@ -38,7 +38,7 @@
   },
   "8": {
     "inputs": {
-      "seed": 588105453162087,
+      "seed": "${seed}",
       "strength": 0.03,
       "image": [
         "7",
@@ -64,7 +64,7 @@
   },
   "10": {
     "inputs": {
-      "seed": 301547961,
+      "seed": "${seed}",
       "resolution": "${resolution}",
       "max_resolution": 3840,
       "batch_size": 1,

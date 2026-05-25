@@ -1,7 +1,6 @@
 package com.ryn.creativeai.api.controller;
 
 import com.ryn.creativeai.core.application.usecase.GetJobStatusUseCase;
-import com.ryn.creativeai.core.application.service.JobEventsHub;
 import com.ryn.creativeai.core.domain.model.Job;
 import com.ryn.creativeai.core.domain.model.JobStatus;
 import com.ryn.creativeai.core.domain.dto.JobAssetDto;
@@ -13,11 +12,9 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.OffsetDateTime;
@@ -35,7 +32,6 @@ public class JobsController {
     private final GetJobStatusUseCase getJobStatus;
     private final JobRepository jobs;
     private final CurrentUserService currentUser;
-    private final JobEventsHub eventsHub;
 
     /** Detalle por id (para polling) */
     @GetMapping("/{id}")
@@ -90,31 +86,22 @@ public class JobsController {
                 .map(this::toSummaryDto);
     }
 
-    /** Eventos SSE de un job (opcional para UI real-time) */
-    @GetMapping(value = "/{id}/events", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public SseEmitter events(@PathVariable UUID id) {
-        var user = currentUser.requireUser();
-        if (jobs.findByIdAndProjectOwnerId(id, user.getId()).isEmpty()) {
-            throw new ResponseStatusException(NOT_FOUND, "Job not found");
-        }
-        return eventsHub.subscribe(id);
-    }
-
     /* =================== mappers =================== */
 
     private JobResponseDto toDto(GetJobStatusUseCase.Response resp) {
         var images = resp.assets().stream()
-                .map(i -> new JobAssetDto(i.url(), i.w(), i.h()))
+                .map(i -> new JobAssetDto(i.url(), i.w(), i.h(), i.mimeType()))
                 .toList();
 
         return new JobResponseDto(
                 resp.jobId(),
-                parseStatus(resp.status()),   // << String -> JobStatus
+                parseStatus(resp.status()),
                 resp.flow(),
                 resp.progress(),
                 resp.phase(),
                 images,
-                resp.errorMessage()
+                resp.errorMessage(),
+                resp.seed()
         );
     }
 
