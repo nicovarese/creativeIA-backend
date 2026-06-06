@@ -3,6 +3,7 @@ package com.ryn.creativeai.adapters.provider;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.ryn.creativeai.core.application.service.GpuMutex;
 import com.ryn.creativeai.core.ports.ImageProviderPort;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
@@ -26,13 +27,16 @@ public class ComfyUIAdapter implements ImageProviderPort {
     private final String baseUrl;
     private final Path downloadDir;
     private final Path comfyInputDir;
+    private final GpuMutex gpuMutex;
 
     public ComfyUIAdapter(
             @Value("${comfy.baseUrl:http://127.0.0.1:8188}") String baseUrl,
             @Value("${comfy.downloadDir:./tmp/comfy}") String downloadDir,
             // si corres Comfy en Docker, seteá el path montado (p.ej. /opt/comfy/ComfyUI/input)
-            @Value("${comfy.inputDir:./ComfyUI/input}") String comfyInputDir
+            @Value("${comfy.inputDir:./ComfyUI/input}") String comfyInputDir,
+            GpuMutex gpuMutex
     ) {
+        this.gpuMutex = gpuMutex;
         this.baseUrl = baseUrl.replaceAll("/+$", "");
         this.downloadDir = Paths.get(downloadDir).toAbsolutePath();
         this.comfyInputDir = Paths.get(comfyInputDir).toAbsolutePath();
@@ -126,6 +130,21 @@ public class ComfyUIAdapter implements ImageProviderPort {
 
     @Override
     public List<String> generate(String compiledWorkflowJson) throws Exception {
+        // Esperamos a la GPU. Si hay un training en curso, esto bloquea hasta que termine.
+        // Para no colgar el TaskExecutor de generación más de la cuenta, damos un timeout
+        // generoso pero finito (45 min). Si vence, lanzamos excepción para que el caller
+        // pueda decidir (fallback a mock, retry, etc.).
+        if (!gpuMutex.tryAcquire("comfyui-generate", 45, java.util.concurrent.TimeUnit.MINUTES)) {
+            throw new IllegalStateException("GPU ocupada por otro job (probablemente un training). Reintentá en unos minutos.");
+        }
+        try {
+            return generateLocked(compiledWorkflowJson);
+        } finally {
+            gpuMutex.release("comfyui-generate");
+        }
+    }
+
+    private List<String> generateLocked(String compiledWorkflowJson) throws Exception {
         // 1) Parseo y reescribo inputs de imagen a filename dentro de ComfyUI/input
         final ObjectNode workflow = (ObjectNode) M.readTree(compiledWorkflowJson);
 

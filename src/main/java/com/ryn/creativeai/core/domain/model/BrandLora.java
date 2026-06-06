@@ -26,6 +26,10 @@ public class BrandLora {
     @Column(name = "trigger_word", nullable = false, length = 40)
     private String triggerWord;
 
+    /** Tipo de producto/sujeto para enriquecer captions (ej: "soda bottle", "running shoe"). */
+    @Column(name = "product_type", length = 80)
+    private String productType;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 16)
     private BrandLoraStatus status = BrandLoraStatus.PENDING;

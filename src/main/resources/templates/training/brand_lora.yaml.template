@@ -1,0 +1,63 @@
+---
+# Plantilla generada por AiToolkitTrainingExecutor. Variables {{...}} se interpolan en runtime.
+job: extension
+config:
+  name: "{{name}}"
+  process:
+    - type: 'sd_trainer'
+      training_folder: "{{outputDir}}"
+      device: cuda:0
+      trigger_word: "{{triggerWord}}"
+      network:
+        type: "lora"
+        linear: 32
+        linear_alpha: 32
+      save:
+        dtype: float16
+        save_every: 500
+        max_step_saves_to_keep: 4
+      datasets:
+        - folder_path: "{{datasetDir}}"
+          caption_ext: "txt"
+          caption_dropout_rate: 0.05
+          shuffle_tokens: false
+          cache_latents_to_disk: true
+          resolution: [ 512, 768, 1024 ]
+      train:
+        batch_size: 1
+        steps: {{steps}}
+        gradient_accumulation_steps: 1
+        train_unet: true
+        train_text_encoder: false
+        gradient_checkpointing: true
+        noise_scheduler: "flowmatch"
+        optimizer: "adamw8bit"
+        lr: 1e-4
+        differential_output_preservation: true
+        dop_loss_multiplier: 1.0
+        ema_config:
+          use_ema: true
+          ema_decay: 0.99
+        dtype: bf16
+      model:
+        name_or_path: "{{baseModel}}"
+        is_flux: true
+        quantize: true
+      sample:
+        sampler: "flowmatch"
+        sample_every: 500
+        width: 1024
+        height: 1024
+        prompts:
+          - "a {{triggerWord}} {{productType}} on a wooden table, soft natural light, photorealistic"
+          - "a {{triggerWord}} {{productType}} in a minimalist studio shot, professional product photography"
+          - "a {{triggerWord}} {{productType}} on marble counter at sunset, commercial photography"
+          - "a beautiful landscape, mountains and lake at golden hour"
+        neg: ""
+        seed: 42
+        walk_seed: true
+        guidance_scale: 4
+        sample_steps: 25
+meta:
+  name: "{{name}}"
+  version: "1.0"
