@@ -83,7 +83,8 @@ public class CreateGenerationJobUseCase {
             req.setSeed((long) ThreadLocalRandom.current().nextInt(1, Integer.MAX_VALUE));
         }
 
-        var brandSpec = loraCatalog.brandProduct(emptyToNull(req.getBrand()), emptyToNull(req.getProduct()));
+        var owner = currentUser.requireUser();
+        var brandSpec = loraCatalog.brandProduct(emptyToNull(req.getBrand()), emptyToNull(req.getProduct()), owner.getId());
         var styleSpec = loraCatalog.style(emptyToNull(req.getStyle()));
         int loraCount = (brandSpec.isPresent() ? 1 : 0) + (styleSpec.isPresent() ? 1 : 0);
         int imageCount = countImages(images, req.getImageUrls());
@@ -109,7 +110,6 @@ public class CreateGenerationJobUseCase {
         String compiled = templateCompiler.compile(def.json(), finalParams);
 
         UUID projectId = parseProjectId(req.getProjectId());
-        var owner = currentUser.requireUser();
         var project = projects.findByIdAndOwnerId(projectId, owner.getId())
                 .orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "project not found"));
 
