@@ -52,6 +52,9 @@ public class BrandLoraService {
         bl.setOwner(owner);
         bl.setName(req.name().trim());
         bl.setTriggerWord(req.triggerWord().trim().toLowerCase(Locale.ROOT));
+        if (req.productType() != null && !req.productType().isBlank()) {
+            bl.setProductType(req.productType().trim());
+        }
         bl.setStatus(BrandLoraStatus.PENDING);
         bl.setProgress(0);
         repo.save(bl);
@@ -133,6 +136,7 @@ public class BrandLoraService {
                 bl.getId(),
                 bl.getName(),
                 bl.getTriggerWord(),
+                bl.getProductType(),
                 bl.getStatus(),
                 bl.getProgress(),
                 bl.getErrorMessage(),

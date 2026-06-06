@@ -7,6 +7,7 @@ import com.ryn.creativeai.infra.BrandLoraRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.core.task.TaskExecutor;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,6 +28,7 @@ import java.util.UUID;
 @Slf4j
 @Component
 @RequiredArgsConstructor
+@ConditionalOnProperty(name = "creativeai.training.aitoolkit.enabled", havingValue = "false", matchIfMissing = true)
 public class StubTrainingExecutor implements TrainingExecutorPort {
 
     private final BrandLoraRepository repo;

@@ -11,13 +11,15 @@ public class BrandLoraDtos {
 
     public record CreateBrandLoraReq(
             @NotBlank @Size(min = 2, max = 80) String name,
-            @NotBlank @Size(min = 2, max = 40) String triggerWord
+            @NotBlank @Size(min = 2, max = 40) String triggerWord,
+            @Size(max = 80) String productType
     ) {}
 
     public record BrandLoraResponse(
             UUID id,
             String name,
             String triggerWord,
+            String productType,
             BrandLoraStatus status,
             Integer progress,
             String errorMessage,
