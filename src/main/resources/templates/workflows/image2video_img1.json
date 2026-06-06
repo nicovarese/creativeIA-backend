@@ -1,0 +1,74 @@
+{
+  "_comment_install": "Requiere Wan 2.2 nativo o ComfyUI-WanVideoWrapper instalado. Verificá nombres de checkpoints (wan2.2_i2v_*.safetensors) según tu instalación. Si los nombres no coinciden, ComfyUI rechazará el prompt y caerá al provider mock.",
+  "1": {
+    "inputs": { "image": "${image}" },
+    "class_type": "LoadImage",
+    "_meta": { "title": "Cargar imagen base" }
+  },
+  "2": {
+    "inputs": { "upscale_method": "lanczos", "megapixels": 0.5, "image": ["1", 0] },
+    "class_type": "ImageScaleToTotalPixels",
+    "_meta": { "title": "Normalizar tamaño" }
+  },
+  "3": {
+    "inputs": { "unet_name": "wan2.2_i2v_high_noise_14B_fp16.safetensors", "weight_dtype": "default" },
+    "class_type": "UNETLoader",
+    "_meta": { "title": "UNET Wan 2.2 i2v" }
+  },
+  "4": {
+    "inputs": { "clip_name": "umt5_xxl_fp16.safetensors", "type": "wan", "device": "default" },
+    "class_type": "CLIPLoader",
+    "_meta": { "title": "CLIP umt5 xxl" }
+  },
+  "5": { "inputs": { "vae_name": "wan_2.1_vae.safetensors" }, "class_type": "VAELoader", "_meta": { "title": "Wan VAE" } },
+  "6": {
+    "inputs": { "text": "${prompt}", "clip": ["4", 0] },
+    "class_type": "CLIPTextEncode",
+    "_meta": { "title": "Prompt positivo" }
+  },
+  "7": {
+    "inputs": { "text": "low quality, blurry, distorted, watermark, text", "clip": ["4", 0] },
+    "class_type": "CLIPTextEncode",
+    "_meta": { "title": "Prompt negativo" }
+  },
+  "8": {
+    "inputs": {
+      "width": 720,
+      "height": 720,
+      "length": 49,
+      "batch_size": 1,
+      "vae": ["5", 0],
+      "start_image": ["2", 0]
+    },
+    "class_type": "WanImageToVideo",
+    "_meta": { "title": "Wan Image To Video (49 frames @16fps ≈ 3s)" }
+  },
+  "9": {
+    "inputs": {
+      "seed": "${seed}",
+      "steps": 20,
+      "cfg": 3.5,
+      "sampler_name": "uni_pc",
+      "scheduler": "simple",
+      "denoise": 1,
+      "model": ["3", 0],
+      "positive": ["6", 0],
+      "negative": ["7", 0],
+      "latent_image": ["8", 0]
+    },
+    "class_type": "KSampler",
+    "_meta": { "title": "KSampler" }
+  },
+  "10": { "inputs": { "samples": ["9", 0], "vae": ["5", 0] }, "class_type": "VAEDecode", "_meta": { "title": "VAE Decode" } },
+  "11": {
+    "inputs": {
+      "filename_prefix": "image2video",
+      "fps": 16,
+      "format": "video/mp4",
+      "save_metadata": true,
+      "images": ["10", 0]
+    },
+    "class_type": "SaveAnimatedWEBP",
+    "_meta": { "title": "Guardar video (cambialo a VHS_VideoCombine para mp4 real)" }
+  }
+}

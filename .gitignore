@@ -42,6 +42,10 @@ target/
 *.swp
 *.swo
 *.DS_Store
+assets/
+tmp/
+data/
+ComfyUI/
 
 # === OS-specific ===
 # macOS

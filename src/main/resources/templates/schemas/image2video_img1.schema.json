@@ -1,0 +1,24 @@
+{
+  "title": "image2video_img1",
+  "type": "object",
+  "properties": {
+    "image": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Imagen de partida (frame 1 del video)."
+    },
+    "prompt": {
+      "type": "string",
+      "minLength": 3,
+      "description": "Descripción del movimiento/acción a animar.",
+      "default": "slow cinematic camera push-in, subtle parallax, dramatic light"
+    },
+    "seed": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 2147483647
+    }
+  },
+  "required": ["image", "prompt", "seed"],
+  "additionalProperties": false
+}

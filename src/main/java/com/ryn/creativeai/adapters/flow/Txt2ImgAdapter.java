@@ -8,6 +8,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.util.List;
+
 @Component
 @RequiredArgsConstructor
 public class Txt2ImgAdapter implements FlowPort {
@@ -15,7 +17,7 @@ public class Txt2ImgAdapter implements FlowPort {
     private final CreateGenerationJobUseCase useCase;
 
     @Override
-    public JobResponseDto handle(CreateJobRequestDto req, MultipartFile image) {
+    public JobResponseDto handle(CreateJobRequestDto req, List<MultipartFile> images) {
         // Validaciones específicas
         if (req.getPrompt() == null || req.getPrompt().isBlank())
             throw new IllegalArgumentException("prompt required");

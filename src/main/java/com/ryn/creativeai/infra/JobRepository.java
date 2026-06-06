@@ -8,4 +8,6 @@ import org.springframework.data.domain.Pageable;
 
 public interface JobRepository extends JpaRepository<Job, UUID> {
     Page<Job> findByProjectId(UUID projectId, Pageable pageable);
+    Page<Job> findByProjectIdAndProjectOwnerId(UUID projectId, UUID ownerId, Pageable pageable);
+    java.util.Optional<Job> findByIdAndProjectOwnerId(UUID id, UUID ownerId);
 }

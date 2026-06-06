@@ -1,0 +1,26 @@
+{
+  "title": "mockup",
+  "type": "object",
+  "properties": {
+    "image": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": ".+\\.png$",
+      "description": "Nombre de archivo PNG accesible por el nodo LoadImage (p.ej. en la carpeta input de ComfyUI).",
+      "default": "mi_imagen.png"
+    },
+    "prompt": {
+      "type": "string",
+      "minLength": 3,
+      "description": "Se concatena detrás de '重新照明, ' en el nodo 11.",
+      "default": "remera lisa, iluminación suave, realista"
+    },
+    "seed": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 2147483647
+    }
+  },
+  "required": ["image", "prompt", "seed"],
+  "additionalProperties": false
+}

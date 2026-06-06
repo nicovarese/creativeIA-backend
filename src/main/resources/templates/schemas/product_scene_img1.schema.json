@@ -1,0 +1,24 @@
+{
+  "title": "product_scene_img1",
+  "type": "object",
+  "properties": {
+    "image": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Nombre de archivo accesible por el nodo LoadImage (carpeta input de ComfyUI)."
+    },
+    "prompt": {
+      "type": "string",
+      "minLength": 3,
+      "description": "Descripción de la escena donde colocar el producto.",
+      "default": "marble counter, soft window light, sunset, minimalist composition"
+    },
+    "seed": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 2147483647
+    }
+  },
+  "required": ["image", "prompt", "seed"],
+  "additionalProperties": false
+}

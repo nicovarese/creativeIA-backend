@@ -1,0 +1,24 @@
+{
+  "title": "upscale",
+  "type": "object",
+  "properties": {
+    "image_1": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": ".+\\.png$",
+      "description": "Nombre de archivo PNG accesible por el nodo LoadImage (p.ej. en la carpeta input de ComfyUI).",
+      "default": "mi_imagen.png"
+    },
+    "resolution": {
+      "type": "integer",
+      "default": 2048
+    },
+    "seed": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 2147483647
+    }
+  },
+  "required": ["image_1", "resolution", "seed"],
+  "additionalProperties": false
+}

@@ -1,223 +1,219 @@
-# CreativeAI – Backend
+# CreativeIA Backend
 
-Backend **Java 21 + Spring Boot** para generar imágenes a partir de **workflows de ComfyUI** (plantillas JSON).  
-Arquitectura **Hexagonal**, validación por **schema**, y proveedores intercambiables (**mock** / **ComfyUI**).
+API Spring Boot para autenticacion, proyectos por usuario, generacion de imagenes, biblioteca por proyecto y serving local de assets.
 
----
+El backend queda listo para arrancar sin preparar PostgreSQL. Por defecto usa H2 persistente en disco y fallback mock para generacion si ComfyUI no esta disponible.
 
-## ✨ Features
+## 1. Stack
 
-- Plantillas JSON de ComfyUI con **placeholders** (`{{key}}`) y compilación segura (**TemplateCompiler**).
-- **Schemas JSON** por template (defaults, required, types, enum, min/max) con **ParamResolver**.
-- Jobs con estados `QUEUED | RUNNING | DONE | FAILED` y assets persistidos.
-- **Adapters**: `Mock` (dev) y `ComfyUI` (prod).
-- Manejo de errores prolijo con `@ControllerAdvice`.
-- Swagger/OpenAPI (solo dev), Flyway, Testcontainers.
+- Java 21
+- Spring Boot 3.5.5
+- Spring Security
+- Spring Data JPA
+- H2 para desarrollo local inmediato
+- PostgreSQL para desarrollo real o despliegue
+- WebFlux `WebClient` para integracion con ComfyUI
 
----
+## 2. Modulos principales
 
-## 🧱 Arquitectura (Hexagonal)
-
-- **core/domain**: entidades y puertos (interfaces).
-- **core/application**: casos de uso y servicios (p.ej. `CreateGenerationJobUseCase`, `TemplateCompiler`,
-  `ParamResolver`).
-- **adapters/**: implementaciones de puertos (p.ej. `FileTemplateRegistry`, `LocalStorageAdapter`, `MockImageProvider`,
-  `ComfyUIAdapter`).
-- **api/**: controladores REST y `ApiExceptionHandler`.
-- **resources/workflows**: plantillas JSON (ComfyUI)
-- **resoruces/schemas**: schemas JSON por plantilla workflows/ # plantillas JSON (ComfyUI)
-
-## 📂 Plantillas & Schemas
-
-- Workflows: `src/main/resources/workflows/`
-- Schemas: `src/main/resources/schemas/`
-- Convención: `{templateKey}_{version}.json` y `{templateKey}_{version}.schema.json`
-
-Ejemplo:
-workflows/flux_simple_v1.json
-schemas/flux_simple_v1.schema.json
-
-**Placeholders**
-
-- Numéricos en el JSON como `"{{width}}"` → el compiler los reemplaza por `768` (sin comillas).
-- Strings como `"{{prompt}}"`.
-
----
-
-## 🔌 API (v1)
-
-### POST `/api/generate`
-
-Crea un Job a partir de un template + params.
-
-**Request**
-
-```json
-{
-  "template": "flux_simple",
-  "version": "v1",
-  "provider": "mock",
-  "params": {
-    "prompt": "A Victorian closeup a Scottish woman with a shocked face",
-    "width": 768,
-    "height": 1024
-  }
-}
+```text
+src/main/java/com/ryn/creativeai
+  adapters/
+    flow/
+    provider/
+    storage/
+    templates/
+  api/
+    controller/
+    dto/
+    exception/
+  config/
+  core/
+    application/
+    domain/
+    ports/
+  infra/
+  security/
 ```
 
-**Response 200**
+## 3. Arranque rapido
 
-```json
-{
-  "jobId": "c67f3c56-11e2-4b97-9e84-...",
-  "status": "QUEUED"
-}
+Requisitos:
+
+- JDK 21
+- Maven Wrapper (`mvnw` / `mvnw.cmd`)
+
+Ejecutar:
+
+```powershell
+./mvnw.cmd spring-boot:run
 ```
 
-### GET `/api/jobs/{id}`
+Con eso el backend arranca usando:
 
-Devuelve el estado y los assets (cuando estén listos).
+- base H2 persistente en `./data/creativeai`
+- assets en `./assets`
+- directorio temporal en `./tmp/comfy`
+- inputs de ComfyUI en `C:/Users/renzo/StabilityMatrix-win-x64/Data/Packages/ComfyUI/input`
+- JWT local de desarrollo
+- fallback mock si ComfyUI falla
 
-**Response**
+## 4. Configuracion por defecto
 
-```json
-{
-  "id": "...",
-  "status": "DONE",
-  "assets": [
-    {
-      "url": "/assets/job_123.png",
-      "width": 768,
-      "height": 1024
-    }
-  ]
-}
+Archivo base:
+
+- `src/main/resources/application.properties`
+
+Defaults actuales:
+
+```properties
+SERVER_PORT=8080
+
+DB_URL=jdbc:h2:file:./data/creativeai;MODE=PostgreSQL;AUTO_SERVER=TRUE
+DB_USERNAME=sa
+DB_PASSWORD=
+DB_DRIVER_CLASS_NAME=org.h2.Driver
+
+JPA_DDL_AUTO=update
+JPA_SHOW_SQL=false
+
+H2_CONSOLE_ENABLED=true
+H2_CONSOLE_PATH=/h2-console
+
+STORAGE_ASSETS_DIR=./assets
+
+COMFY_BASE_URL=http://127.0.0.1:8188
+COMFY_INPUT_DIR=C:/Users/renzo/StabilityMatrix-win-x64/Data/Packages/ComfyUI/input
+COMFY_DOWNLOAD_DIR=./tmp/comfy
+GENERATION_FALLBACK_TO_MOCK=true
+
+APP_JWT_SECRET=creativeai_local_dev_secret_at_least_32_chars
+APP_JWT_EXPIRES_MINUTES=120
+APP_PUBLIC_BASE_URL=http://localhost:8080
+APP_CORS_ALLOWED_ORIGINS=http://127.0.0.1:4200,http://localhost:4200
 ```
 
-En dev se sirven archivos estáticos desde ./assets como /assets/**.
+## 5. Usar PostgreSQL en lugar de H2
 
-## 🚦 Validación & Errores
+Si prefieres correr con PostgreSQL real, define estas variables antes de arrancar:
 
-#DTOs con @Valid (estructura del request).
-
-ParamResolver valida params contra el schema (required, tipos, enum, min/max, additionalProperties).
-
-ApiExceptionHandler traduce:
-
-- IllegalArgumentException → 400 invalid_parameters
-
-- JSON mal formado → 400 malformed_json
-
-- @Valid falló → 400 validation_error
-
-- Error inesperado → 500 internal_error
-
-**Ejemplo 400**
-
-```json
-{
-  "status": 400,
-  "code": "invalid_parameters",
-  "message": "Falta parámetro requerido: height"
-}
+```powershell
+$env:DB_URL="jdbc:postgresql://localhost:5432/creativeai"
+$env:DB_USERNAME="postgres"
+$env:DB_PASSWORD="tu_password"
+$env:DB_DRIVER_CLASS_NAME="org.postgresql.Driver"
+./mvnw.cmd spring-boot:run
 ```
 
-# A partir de aca todo esta pendiente de desarrollo (tanto en implementacion como documentacion)
+Si luego quieres volver al modo listo-para-usar, cierra la terminal o elimina esas variables y arranca otra vez.
 
-## ⚙️ Configuración
+## 6. Perfiles
 
-application.yml (ejemplo)
+- `application.properties`: configuracion portable y lista para desarrollo local
+- `application-dev.properties`: tuning minimo de desarrollo
+- `src/test/resources/application-test.properties`: H2 para tests
 
-server:
-port: 8080
+## 7. Endpoints principales
 
-storage:
-assetsDir: ./assets
+### Auth
 
-comfy:
-baseUrl: http://localhost:8188
+- `POST /v1/auth/register`
+- `POST /v1/auth/login`
+- `GET /v1/auth/me`
 
-spring:
-jpa:
-hibernate:
-ddl-auto: validate
+### Catalogo del Studio
 
-## ▶️ Ejecutar en local
+- `GET /v1/catalog/studio-options`
 
-Postgres 16 corriendo.
+### Proyectos
 
-Flyway corre al levantar.
+- `POST /v1/projects`
+- `GET /v1/projects?page=0&size=50`
+- `GET /v1/projects/{projectId}/assets?page=1&size=100&search=...`
 
-App:
+### Generacion y jobs
 
-mvn spring-boot:run
+- `POST /v1/generate`
+- `GET /v1/jobs/{id}`
+- `GET /v1/jobs/{id}/result`
+- `GET /v1/jobs/{id}/events`
+- `GET /v1/jobs/project/{projectId}`
 
-curl de prueba
+## 8. Seguridad
 
-curl -X POST http://localhost:8080/api/generate \
--H 'Content-Type: application/json' \
--d '{
-"template":"flux_simple","version":"v1","provider":"mock",
-"params":{"prompt":"hola","width":768,"height":1024}
-}'
+- JWT stateless via `Authorization: Bearer <token>`
+- `/v1/auth/**` es publico
+- `/assets/**` es publico para permitir `<img src="...">`
+- el resto requiere autenticacion
+- el ownership se valida en proyectos, assets, jobs y generacion
+- las `imageUrls` externas arbitrarias ya no se descargan server-side
 
-## 🐘 Base de datos (Flyway)
+## 9. Desarrollo local
 
-Migraciones en src/main/resources/db/migration.
+### H2 Console
 
-Tablas principales:
+Si `H2_CONSOLE_ENABLED=true`, puedes abrir:
 
-jobs(id, template_key, template_ver, provider, status, compiled_json, error_message, created_at, updated_at)
+- `http://localhost:8080/h2-console`
 
-assets(id, job_id, url, width, height, created_at)
+Valores habituales:
 
-## 🖼️ Integración con ComfyUI
+- JDBC URL: `jdbc:h2:file:./data/creativeai`
+- User Name: `sa`
+- Password: vacio
 
-Instalar/ejecutar ComfyUI (p.ej. http://localhost:8188).
+### Build y tests
 
-Colocar modelos requeridos por tu workflow.
+```powershell
+./mvnw.cmd -q clean test
+```
 
-Usar provider: "comfyui" o perfil prod.
+La suite actual usa H2 y no depende de PostgreSQL local.
 
-El adapter envía /prompt, hace polling de /history/{prompt_id} y copia imágenes a ./assets.
+## 10. Integracion con frontend
 
-## 🧪 Tests
+El frontend actual consume:
 
-Unit: TemplateCompiler, ParamResolver, UseCases.
+- `GET /v1/catalog/studio-options`
+- `GET /v1/projects`
+- `POST /v1/projects`
+- `GET /v1/projects/{id}/assets`
+- `POST /v1/generate`
+- `GET /v1/jobs/{id}`
 
-Integración: Testcontainers (Postgres).
+Tambien espera que:
 
-MockMvc: tests de endpoints.
+- `status` sea `QUEUED | RUNNING | DONE | FAILED`
+- `phase` exista
+- los assets tengan `url` utilizable en `<img>`
 
-## 🔐 Seguridad (básico)
+## 11. Troubleshooting
 
-API Key/JWT por cliente (pendiente).
+### La app falla al arrancar por base de datos
 
-Rate limiting por tenant (pendiente).
+Si no configuraste nada, no deberia intentar usar PostgreSQL. Debe arrancar con H2.
 
-CORS restringido al front.
+Si configuraste PostgreSQL manualmente:
 
-## 📈 Observabilidad
+- revisa `DB_URL`
+- revisa `DB_USERNAME`
+- revisa `DB_PASSWORD`
+- revisa `DB_DRIVER_CLASS_NAME=org.postgresql.Driver`
 
-Actuator: /actuator/health, /actuator/metrics, /actuator/prometheus.
+### `401` desde frontend
 
-Micrometer + Prometheus (pendiente).
+- revisa `APP_JWT_SECRET`
+- verifica que el token no este expirado
+- revisa el header `Authorization`
 
-Logs estructurados JSON (pendiente).
+### Assets no aparecen
 
-## 🗺️ Roadmap corto
+- revisa `STORAGE_ASSETS_DIR`
+- verifica permisos de escritura
+- revisa que `APP_PUBLIC_BASE_URL` coincida con el host real
 
-Adapter ComfyUI con timeouts/retries y circuit breaker.
+### ComfyUI falla
 
-Idempotency-Key en POST /api/generate.
-
-Almacenamiento S3/MinIO + CDN.
-
-Multi-tenant (orgs, planes, cuotas).
-
-Webhooks job.completed.
-
-## 📄 Licencia
-
-Privado
-
+- revisa `COMFY_BASE_URL`
+- revisa `COMFY_INPUT_DIR`
+- si `GENERATION_FALLBACK_TO_MOCK=true`, el backend cae al provider mock para pruebas locales

@@ -1,0 +1,69 @@
+{
+  "1": { "inputs": { "strength": 1, "model": ["2", 0] }, "class_type": "CFGNorm", "_meta": { "title": "CFGNorm" } },
+  "2": { "inputs": { "shift": 3, "model": ["20", 0] }, "class_type": "ModelSamplingAuraFlow", "_meta": { "title": "ModelSamplingAuraFlow" } },
+  "3": {
+    "inputs": { "prompt": "lowres, blurry, deformed, watermark, low quality, plastic, fake, distorted product", "clip": ["79", 0], "vae": ["22", 0], "image1": ["39", 0] },
+    "class_type": "TextEncodeQwenImageEditPlus",
+    "_meta": { "title": "TextEncodeQwenImageEditPlus (negative)" }
+  },
+  "10": { "inputs": { "pixels": ["39", 0], "vae": ["22", 0] }, "class_type": "VAEEncode", "_meta": { "title": "VAE Codificar" } },
+  "11": {
+    "inputs": {
+      "prompt": "Place this product naturally in the scene: ${prompt}. Professional commercial product photography, integrated lighting matching the scene, photorealistic, sharp focus on product, shallow depth of field, magazine quality.",
+      "clip": ["79", 0],
+      "vae": ["22", 0],
+      "image1": ["39", 0]
+    },
+    "class_type": "TextEncodeQwenImageEditPlus",
+    "_meta": { "title": "TextEncodeQwenImageEditPlus (positive)" }
+  },
+  "12": { "inputs": { "samples": ["14", 0], "vae": ["22", 0] }, "class_type": "VAEDecode", "_meta": { "title": "Decodificación VAE" } },
+  "14": {
+    "inputs": {
+      "seed": "${seed}",
+      "steps": 8,
+      "cfg": 1,
+      "sampler_name": "euler",
+      "scheduler": "simple",
+      "denoise": 1,
+      "model": ["1", 0],
+      "positive": ["11", 0],
+      "negative": ["3", 0],
+      "latent_image": ["10", 0]
+    },
+    "class_type": "KSampler",
+    "_meta": { "title": "KSampler" }
+  },
+  "20": {
+    "inputs": { "lora_name": "Qwen Image Edit\\Qwen-Image-Lightning-8steps-V2.0.safetensors", "strength_model": 1, "model": ["77", 0] },
+    "class_type": "LoraLoaderModelOnly",
+    "_meta": { "title": "LoRA Lightning 8 steps" }
+  },
+  "22": { "inputs": { "vae_name": "qwen_image_vae.safetensors" }, "class_type": "VAELoader", "_meta": { "title": "Cargar VAE" } },
+  "31": {
+    "inputs": { "image": "${image}" },
+    "class_type": "LoadImage",
+    "_meta": { "title": "Cargar Producto" }
+  },
+  "39": {
+    "inputs": { "upscale_method": "lanczos", "megapixels": 1, "image": ["31", 0] },
+    "class_type": "ImageScaleToTotalPixels",
+    "_meta": { "title": "Escalar a ~1MP" }
+  },
+  "45": { "inputs": { "images": ["12", 0] }, "class_type": "SaveImage", "_meta": { "title": "Guardar Imagen", "filename_prefix": "product_scene" } },
+  "77": {
+    "inputs": { "lora_name": "Qwen Image Edit\\Qwen-Edit-Relight.safetensors", "strength_model": 1, "model": ["78", 0] },
+    "class_type": "LoraLoaderModelOnly",
+    "_meta": { "title": "LoRA Relight" }
+  },
+  "78": {
+    "inputs": { "unet_name": "qwen-image-edit\\qwen_image_edit_fp8_e4m3fn.safetensors", "weight_dtype": "default" },
+    "class_type": "UNETLoader",
+    "_meta": { "title": "Cargar Modelo de Difusión Qwen Image Edit" }
+  },
+  "79": {
+    "inputs": { "clip_name": "qwen\\qwen_2.5_vl_7b_fp8_scaled.safetensors", "type": "qwen_image", "device": "default" },
+    "class_type": "CLIPLoader",
+    "_meta": { "title": "Cargar CLIP Qwen 2.5 VL 7B" }
+  }
+}

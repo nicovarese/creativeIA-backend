@@ -5,6 +5,8 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 
+import java.util.List;
+
 @Data
 public class CreateJobRequestDto {
     @NotBlank private String projectId;
@@ -12,6 +14,7 @@ public class CreateJobRequestDto {
 
     private String prompt;
     private Integer width, height, batch;
+    private Long seed; // opcional; si viene null el back genera uno aleatorio
 
     private String style;   // "Ninguno" => null
     private String brand;
@@ -19,12 +22,11 @@ public class CreateJobRequestDto {
 
     // img2img
     private Double strength;
-    private String imageUrl;
+    private List<String> imageUrls;
 
     // upscale
-    private Integer factor;
+    private Integer resolution;
 
     // mockup
-    private String template;
     private Integer scale, offsetX, offsetY;
 }

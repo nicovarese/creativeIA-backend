@@ -1,0 +1,52 @@
+{
+  "title": "img2img_img3",
+  "type": "object",
+  "properties": {
+    "prompt": {
+      "type": "string",
+      "minLength": 3,
+      "default": "A Victorian closeup a Scottish woman with a very shocked face and open wide mouth."
+    },
+    "width": {
+      "type": "integer",
+      "minimum": 64,
+      "multipleOf": 64,
+      "default": 1024
+    },
+    "batch": {
+      "type": "integer",
+      "default": 1
+    },
+    "height": {
+      "type": "integer",
+      "minimum": 64,
+      "multipleOf": 64,
+      "default": 1024
+    },
+    "image_1": {
+      "type": "string"
+    },
+    "image_2": {
+      "type": "string"
+    },
+    "image_3":{
+      "type": "string"
+    },
+    "seed": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 2147483647
+    }
+  },
+  "required": [
+    "prompt",
+    "width",
+    "height",
+    "batch",
+    "image_1",
+    "image_2",
+    "image_3",
+    "seed"
+  ],
+  "additionalProperties": false
+}

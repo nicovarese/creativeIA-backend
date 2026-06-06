@@ -10,6 +10,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Instant;
 import java.util.HashMap;
@@ -85,6 +86,13 @@ public class ApiExceptionHandler {
     public ResponseEntity<Object> handleMissingParam(MissingServletRequestParameterException ex) {
         Map<String,Object> details = Map.of(ex.getParameterName(), "is required");
         return problem(HttpStatus.BAD_REQUEST, "missing_parameter", "Missing request parameter", details);
+    }
+
+    @ExceptionHandler(ResponseStatusException.class)
+    public ResponseEntity<Object> handleResponseStatus(ResponseStatusException ex) {
+        HttpStatus status = HttpStatus.valueOf(ex.getStatusCode().value());
+        String message = ex.getReason() != null ? ex.getReason() : status.getReasonPhrase();
+        return problem(status, "http_error", message, null);
     }
 
     /* ===== 500 INTERNAL SERVER ERROR (nuestro bug/falla externa) ===== */

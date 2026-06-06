@@ -62,8 +62,9 @@ public class Job {
     @Column private String brand;
     @Column private String product;
 
+    @Column private Long seed;
     @Column private Double strength; // img2img
-    @Column private Integer factor;  // upscale
+    @Column private Integer resolution;  // upscale
     @Column private String template; // mockup
     @Column(name = "scale_pct") private Integer scale;
     @Column(name = "offset_x")  private Integer offsetX;
