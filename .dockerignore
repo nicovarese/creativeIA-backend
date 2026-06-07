@@ -1,0 +1,44 @@
+# =====================================================================
+#  Archivos que NO deben entrar al contexto del docker build.
+#  Reducen el tamaño del contexto enviado al daemon y aceleran builds.
+# =====================================================================
+
+# Build artifacts
+target/
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# Datos locales / volúmenes (no deben empaquetarse)
+tmp/
+assets/
+training/
+data/
+
+# ai-toolkit (clonado local; puede pesar decenas de GB)
+ai-toolkit/
+
+# Git metadata
+.git/
+.gitignore
+.gitattributes
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Otros pesados que no aplican al build
+**/node_modules/
+**/.angular/
+**/dist/
+ComfyUI/
+tmprepo/
+
+# El propio Dockerfile y compañeros se incluyen por default; no hace
+# falta excluirlos.
